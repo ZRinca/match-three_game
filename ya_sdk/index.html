@@ -3,743 +3,380 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Три в ряд — Геометрия</title>
+  <title>Match 3 — Geometry</title>
   <script src="/sdk.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
+      width: 100%; height: 100%; overflow: hidden;
       background: radial-gradient(circle at 50% 0%, #2a1e4a 0%, #1a1a2e 60%, #0d0d1a 100%);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #fff;
-      user-select: none;
+      color: #fff; user-select: none;
     }
 
-    /* ========== SCREENS ========== */
     .screen {
-      position: fixed;
-      inset: 0;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      z-index: 10;
-      opacity: 0;
-      transform: scale(0.96);
+      position: fixed; inset: 0; display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      padding: 16px; z-index: 10;
+      opacity: 0; transform: scale(0.96);
       transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.4,0.64,1);
       pointer-events: none;
     }
-    .screen.active {
-      display: flex;
-      opacity: 1;
-      transform: scale(1);
-      pointer-events: auto;
-    }
-    .screen.leaving {
-      display: flex;
-      opacity: 0;
-      transform: scale(0.9);
-      pointer-events: none;
-    }
+    .screen.active { display: flex; opacity: 1; transform: scale(1); pointer-events: auto; }
+    .screen.leaving { display: flex; opacity: 0; transform: scale(0.9); pointer-events: none; }
 
     /* ========== LOADING ========== */
     #loading {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       background: radial-gradient(circle at 50% 50%, #241c44 0%, #12101f 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      z-index: 300;
-      transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.6,0,0.4,1);
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      z-index: 300; transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.6,0,0.4,1);
       overflow: hidden;
     }
-    #loading.hidden {
-      opacity: 0;
-      transform: scale(1.15);
-      pointer-events: none;
-    }
-    .loadShapes {
-      position: relative;
-      width: 140px;
-      height: 140px;
-      margin-bottom: 32px;
-    }
-    .loadShapes .orbit {
-      position: absolute;
-      inset: 0;
-      animation: orbitRotate 3.6s linear infinite;
-    }
+    #loading.hidden { opacity: 0; transform: scale(1.15); pointer-events: none; }
+    .loadShapes { position: relative; width: 140px; height: 140px; margin-bottom: 32px; }
+    .loadShapes .orbit { position: absolute; inset: 0; animation: orbitRotate 3.6s linear infinite; }
     .loadShapes .orbit:nth-child(2) { animation-duration: 4.4s; animation-direction: reverse; }
     .loadShapes .orbit:nth-child(3) { animation-duration: 5.2s; }
     .loadShapes .orbit:nth-child(4) { animation-duration: 3.0s; animation-direction: reverse; }
-    @keyframes orbitRotate {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
+    @keyframes orbitRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .loadShapes .shape {
-      position: absolute;
-      width: 32px;
-      height: 32px;
-      border-radius: 8px;
-      left: 50%;
-      top: 0;
-      margin-left: -16px;
+      position: absolute; width: 32px; height: 32px; border-radius: 8px;
+      left: 50%; top: 0; margin-left: -16px;
       box-shadow: 0 6px 16px rgba(0,0,0,0.35);
       animation: shapePulse 1.8s ease-in-out infinite;
     }
-    .loadShapes .shape.s1 { background: linear-gradient(135deg, #ff9a9a, #e74c3c); animation-delay: 0s; }
+    .loadShapes .shape.s1 { background: linear-gradient(135deg, #ff9a9a, #e74c3c); }
     .loadShapes .shape.s2 { background: linear-gradient(135deg, #8ecdf8, #3498db); border-radius: 50%; animation-delay: 0.3s; }
     .loadShapes .shape.s3 { background: linear-gradient(135deg, #7bf5b5, #2ecc71); clip-path: polygon(50% 0, 100% 100%, 0 100%); border-radius: 0; animation-delay: 0.6s; }
     .loadShapes .shape.s4 { background: linear-gradient(135deg, #fff2a8, #f1c40f); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); border-radius: 0; animation-delay: 0.9s; }
-    @keyframes shapePulse {
-      0%, 100% { transform: scale(1); }
-      50%      { transform: scale(1.25); }
-    }
-    .loadCenter {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+    @keyframes shapePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+    .loadCenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
     .loadCenter::before {
-      content: '';
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
+      content: ''; width: 40px; height: 40px; border-radius: 50%;
       background: radial-gradient(circle, #f1c40f 0%, transparent 70%);
       animation: centerGlow 1.6s ease-in-out infinite;
     }
-    @keyframes centerGlow {
-      0%, 100% { transform: scale(1); opacity: 0.7; }
-      50%      { transform: scale(1.5); opacity: 1; }
-    }
-    .loadText {
-      font-size: 15px;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      opacity: 0.7;
-      font-weight: 700;
-      animation: loadTextPulse 2s ease-in-out infinite;
-    }
-    @keyframes loadTextPulse {
-      0%, 100% { opacity: 0.4; }
-      50%      { opacity: 0.9; }
-    }
-    .loadDots {
-      display: inline-block;
-      width: 30px;
-      text-align: left;
-    }
-    .loadDots::after {
-      content: '';
-      animation: dots 1.5s steps(4, end) infinite;
-    }
-    @keyframes dots {
-      0%  { content: ''; }
-      25% { content: '.'; }
-      50% { content: '..'; }
-      75% { content: '...'; }
-    }
+    @keyframes centerGlow { 0%, 100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.5); opacity: 1; } }
+    .loadText { font-size: 15px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.7; font-weight: 700; animation: loadTextPulse 2s ease-in-out infinite; }
+    @keyframes loadTextPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+    .loadDots { display: inline-block; width: 30px; text-align: left; }
+    .loadDots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 
     /* ========== MENU ========== */
     #menuScreen { gap: 14px; }
     .gameTitle {
-      font-size: 52px;
-      font-weight: 900;
-      letter-spacing: 3px;
-      text-align: center;
-      line-height: 1;
+      font-size: 52px; font-weight: 900; letter-spacing: 3px; text-align: center; line-height: 1;
       background: linear-gradient(180deg, #ffffff 0%, #f1c40f 55%, #e67e22 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      filter: drop-shadow(0 6px 24px rgba(241,196,15,0.35));
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: center;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 6px 24px rgba(241,196,15,0.35)); margin-bottom: 8px;
+      display: flex; justify-content: center;
     }
-    .gameTitle .letter {
-      display: inline-block;
-      opacity: 0;
-      transform: translateY(-40px) rotate(-15deg) scale(0.4);
-    }
-    #menuScreen.active .gameTitle .letter {
-      animation: letterDrop 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards;
-    }
+    .gameTitle .letter { display: inline-block; opacity: 0; transform: translateY(-40px) rotate(-15deg) scale(0.4); }
+    #menuScreen.active .gameTitle .letter { animation: letterDrop 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards; }
     @keyframes letterDrop {
-      0%   { opacity: 0; transform: translateY(-40px) rotate(-15deg) scale(0.4); }
-      60%  { opacity: 1; transform: translateY(6px) rotate(4deg) scale(1.15); }
+      0% { opacity: 0; transform: translateY(-40px) rotate(-15deg) scale(0.4); }
+      60% { opacity: 1; transform: translateY(6px) rotate(4deg) scale(1.15); }
       100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
     }
-    .subtitle {
-      font-size: 13px;
-      letter-spacing: 6px;
-      opacity: 0;
-      text-transform: uppercase;
-      margin-bottom: 26px;
-      transform: translateY(8px);
-    }
-    #menuScreen.active .subtitle {
-      animation: fadeUp 0.6s ease 0.6s forwards;
-    }
-    @keyframes fadeUp {
-      to { opacity: 0.6; transform: translateY(0); }
-    }
+    .subtitle { font-size: 13px; letter-spacing: 6px; opacity: 0; text-transform: uppercase; margin-bottom: 26px; transform: translateY(8px); }
+    #menuScreen.active .subtitle { animation: fadeUp 0.6s ease 0.6s forwards; }
+    @keyframes fadeUp { to { opacity: 0.6; transform: translateY(0); } }
 
     .menuBest {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 14px;
-      padding: 10px 22px;
-      margin-bottom: 26px;
-      text-align: center;
-      opacity: 0;
-      transform: scale(0.4) translateY(10px);
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px; padding: 10px 22px; margin-bottom: 26px; text-align: center;
+      opacity: 0; transform: scale(0.4) translateY(10px);
     }
-    #menuScreen.active .menuBest {
-      animation: bestPop 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.75s forwards;
-    }
+    #menuScreen.active .menuBest { animation: bestPop 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.75s forwards; }
     @keyframes bestPop {
-      0%   { opacity: 0; transform: scale(0.4) translateY(10px); }
-      60%  { opacity: 1; transform: scale(1.1) translateY(0); }
+      0% { opacity: 0; transform: scale(0.4) translateY(10px); }
+      60% { opacity: 1; transform: scale(1.1) translateY(0); }
       100% { opacity: 1; transform: scale(1) translateY(0); }
     }
-    .menuBestLabel {
-      font-size: 10px;
-      letter-spacing: 1.5px;
-      opacity: 0.6;
-      text-transform: uppercase;
-      font-weight: 700;
-    }
-    .menuBestValue {
-      font-size: 28px;
-      font-weight: 900;
-      color: #f1c40f;
-      line-height: 1.15;
-    }
+    .menuBestLabel { font-size: 10px; letter-spacing: 1.5px; opacity: 0.6; text-transform: uppercase; font-weight: 700; }
+    .menuBestValue { font-size: 28px; font-weight: 900; color: #f1c40f; line-height: 1.15; }
 
     .menuBtn {
-      width: 270px;
-      padding: 16px 20px;
-      font-size: 17px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      border: none;
-      border-radius: 14px;
-      color: #fff;
-      cursor: pointer;
+      width: 270px; padding: 16px 20px; font-size: 17px; font-weight: 800; letter-spacing: 0.5px;
+      border: none; border-radius: 14px; color: #fff; cursor: pointer;
       transition: transform 0.1s, box-shadow 0.25s, opacity 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
       background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
       box-shadow: 0 6px 20px rgba(102,126,234,0.45);
-      opacity: 0;
-      transform: translateY(40px);
-      position: relative;
-      overflow: hidden;
+      opacity: 0; transform: translateY(40px); position: relative; overflow: hidden;
     }
-    #menuScreen.active .menuBtn {
-      animation: btnSlideIn 0.6s cubic-bezier(0.34,1.4,0.64,1) forwards;
-    }
+    #menuScreen.active .menuBtn { animation: btnSlideIn 0.6s cubic-bezier(0.34,1.4,0.64,1) forwards; }
     #menuScreen.active .menuBtn:nth-of-type(1) { animation-delay: 0.95s; }
     #menuScreen.active .menuBtn:nth-of-type(2) { animation-delay: 1.1s; }
     #menuScreen.active .menuBtn:nth-of-type(3) { animation-delay: 1.25s; }
     @keyframes btnSlideIn {
-      0%   { opacity: 0; transform: translateY(40px) scale(0.9); }
-      70%  { opacity: 1; transform: translateY(-4px) scale(1.02); }
+      0% { opacity: 0; transform: translateY(40px) scale(0.9); }
+      70% { opacity: 1; transform: translateY(-4px) scale(1.02); }
       100% { opacity: 1; transform: translateY(0) scale(1); }
     }
-    .menuBtn.primary {
-      background: linear-gradient(180deg, #f7b733 0%, #fc4a1a 100%);
-      box-shadow: 0 8px 26px rgba(252,74,26,0.5);
-      font-size: 19px;
-      padding: 20px;
-    }
+    .menuBtn.primary { background: linear-gradient(180deg, #f7b733 0%, #fc4a1a 100%); box-shadow: 0 8px 26px rgba(252,74,26,0.5); font-size: 19px; padding: 20px; }
     .menuBtn.primary::before {
-      content: '';
-      position: absolute;
-      inset: 0;
+      content: ''; position: absolute; inset: 0;
       background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.4) 45%, transparent 90%);
-      transform: translateX(-120%);
-      animation: btnShine 3s ease-in-out infinite;
+      transform: translateX(-120%); animation: btnShine 3s ease-in-out infinite;
     }
-    @keyframes btnShine {
-      0%, 60% { transform: translateX(-120%); }
-      100%    { transform: translateX(120%); }
-    }
+    @keyframes btnShine { 0%, 60% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
     .menuBtn:hover { opacity: 0.95; box-shadow: 0 8px 28px rgba(102,126,234,0.6); }
     .menuBtn.primary:hover { box-shadow: 0 10px 32px rgba(252,74,26,0.65); }
     .menuBtn:active { transform: scale(0.95); }
     .menuBtnIcon { font-size: 22px; }
 
-    /* ========== LEVELS ========== */
-    #levelScreen {
-      justify-content: flex-start;
-      padding-top: 16px;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .screenHeader {
-      width: 100%;
-      max-width: 520px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-      flex-shrink: 0;
-    }
-    .backBtn {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.15);
-      background: rgba(255,255,255,0.06);
-      color: #fff;
-      font-size: 20px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    /* ========== LANGUAGE SWITCHER ========== */
+    .langBtn {
+      position: fixed; top: 12px; right: 12px; z-index: 400;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 6px 12px; color: #fff; font-size: 13px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
       transition: transform 0.1s, background 0.2s;
-      flex-shrink: 0;
+    }
+    .langBtn:hover { background: rgba(255,255,255,0.16); }
+    .langBtn:active { transform: scale(0.92); }
+
+    .langModal {
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+    }
+    .langModal.active { display: flex; animation: fadeIn 0.25s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .langModalInner {
+      background: #1e1a35; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px; padding: 22px; width: 300px; max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      animation: modalPop 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes modalPop {
+      0% { opacity: 0; transform: scale(0.85) translateY(20px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .langModalTitle { font-size: 18px; font-weight: 800; margin-bottom: 14px; text-align: center; }
+    .langItem {
+      display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+      border-radius: 12px; cursor: pointer; font-size: 15px; font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+      border: 1px solid transparent;
+    }
+    .langItem:hover { background: rgba(255,255,255,0.08); }
+    .langItem:active { transform: scale(0.97); }
+    .langItem.current { background: rgba(102,126,234,0.25); border-color: rgba(102,126,234,0.5); }
+    .langItem .flag { font-size: 22px; }
+    .langItem .check { margin-left: auto; color: #2ecc71; font-weight: 900; opacity: 0; }
+    .langItem.current .check { opacity: 1; }
+    .langClose {
+      margin-top: 14px; width: 100%; padding: 11px;
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+      border: none; border-radius: 12px; color: #fff;
+      font-weight: 700; font-size: 14px; cursor: pointer;
+    }
+    .langClose:active { transform: scale(0.96); }
+
+    /* ========== LEVELS ========== */
+    #levelScreen { justify-content: flex-start; padding-top: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .screenHeader { width: 100%; max-width: 520px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-shrink: 0; }
+    .backBtn {
+      width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06); color: #fff; font-size: 20px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s, background 0.2s; flex-shrink: 0;
     }
     .backBtn:hover { background: rgba(255,255,255,0.12); }
     .backBtn:active { transform: scale(0.9); }
-    .screenTitle {
-      font-size: 26px;
-      font-weight: 800;
-      flex: 1;
-    }
-    .screenSub {
-      font-size: 12px;
-      opacity: 0.6;
-      font-weight: 600;
-    }
+    .screenTitle { font-size: 26px; font-weight: 800; flex: 1; }
+    .screenSub { font-size: 12px; opacity: 0.6; font-weight: 600; }
 
     .worldLabel {
-      width: 100%;
-      max-width: 520px;
-      text-align: left;
-      font-size: 11px;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      opacity: 0.5;
-      font-weight: 700;
-      margin: 14px 0 6px;
-      padding-left: 6px;
+      width: 100%; max-width: 520px; text-align: left; font-size: 11px; letter-spacing: 1.5px;
+      text-transform: uppercase; opacity: 0.5; font-weight: 700;
+      margin: 14px 0 6px; padding-left: 6px;
     }
     .worldLabel:first-of-type { margin-top: 0; }
 
-    .levelsGrid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 8px;
-      width: 100%;
-      max-width: 520px;
-      padding: 0 4px;
-      margin-bottom: 4px;
-    }
+    .levelsGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; max-width: 520px; padding: 0 4px; margin-bottom: 4px; }
     .levelTile {
-      aspect-ratio: 1;
-      border-radius: 14px;
+      aspect-ratio: 1; border-radius: 14px;
       background: linear-gradient(180deg, rgba(102,126,234,0.35) 0%, rgba(118,75,162,0.35) 100%);
       border: 1px solid rgba(255,255,255,0.15);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      cursor: pointer;
-      color: #fff;
-      font-weight: 800;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; cursor: pointer; color: #fff; font-weight: 800;
       transition: transform 0.12s, box-shadow 0.25s, background 0.25s;
-      position: relative;
-      overflow: hidden;
+      position: relative; overflow: hidden;
     }
-    #levelScreen.active .levelTile {
-      opacity: 0;
-      transform: scale(0.4) translateY(20px);
-      animation: tilePop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
-    }
+    #levelScreen.active .levelTile { opacity: 0; transform: scale(0.4) translateY(20px); animation: tilePop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
     @keyframes tilePop {
-      0%   { opacity: 0; transform: scale(0.4) translateY(20px); }
-      60%  { opacity: 1; transform: scale(1.08) translateY(0); }
+      0% { opacity: 0; transform: scale(0.4) translateY(20px); }
+      60% { opacity: 1; transform: scale(1.08) translateY(0); }
       100% { opacity: 1; transform: scale(1) translateY(0); }
     }
-    .levelTile:hover:not(.locked) {
-      transform: translateY(-2px) scale(1.05) !important;
-      box-shadow: 0 8px 22px rgba(102,126,234,0.5);
-    }
+    .levelTile:hover:not(.locked) { transform: translateY(-2px) scale(1.05) !important; box-shadow: 0 8px 22px rgba(102,126,234,0.5); }
     .levelTile:active:not(.locked) { transform: scale(0.95) !important; }
-    .levelTile.locked {
-      background: rgba(255,255,255,0.04);
-      border-color: rgba(255,255,255,0.06);
-      color: rgba(255,255,255,0.25);
-      cursor: not-allowed;
-    }
-    .levelTile.completed {
-      background: linear-gradient(180deg, rgba(46,204,113,0.35) 0%, rgba(21,122,59,0.35) 100%);
-      border-color: rgba(46,204,113,0.5);
-    }
-    .levelTile.current {
-      border-color: #f1c40f;
-      animation: tilePop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards,
-                 currentPulse 2s ease-in-out infinite 0.5s;
-    }
+    .levelTile.locked { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.25); cursor: not-allowed; }
+    .levelTile.completed { background: linear-gradient(180deg, rgba(46,204,113,0.35) 0%, rgba(21,122,59,0.35) 100%); border-color: rgba(46,204,113,0.5); }
+    .levelTile.current { border-color: #f1c40f; animation: tilePop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards, currentPulse 2s ease-in-out infinite 0.5s; }
     @keyframes currentPulse {
       0%, 100% { box-shadow: 0 0 0 2px rgba(241,196,15,0.4), 0 0 20px rgba(241,196,15,0.35); }
-      50%      { box-shadow: 0 0 0 2px rgba(241,196,15,0.7), 0 0 32px rgba(241,196,15,0.55); }
+      50% { box-shadow: 0 0 0 2px rgba(241,196,15,0.7), 0 0 32px rgba(241,196,15,0.55); }
     }
     .levelNum { font-size: 20px; line-height: 1; }
-    .levelStars {
-      display: flex;
-      gap: 1px;
-      font-size: 8px;
-      line-height: 1;
-      color: #f1c40f;
-    }
+    .levelStars { display: flex; gap: 1px; font-size: 8px; line-height: 1; color: #f1c40f; }
     .levelStars .empty { color: rgba(255,255,255,0.15); }
     .levelLock { font-size: 18px; opacity: 0.5; }
 
     /* ========== GAME ========== */
     #gameScreen { padding: 8px; }
-    #hud {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 100%;
-      max-width: 480px;
-      margin-bottom: 8px;
-    }
-    #hudTop {
-      display: flex;
-      justify-content: space-between;
-      gap: 6px;
-    }
+    #hud { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 480px; margin-bottom: 8px; }
+    #hudTop { display: flex; justify-content: space-between; gap: 6px; }
     .hudItem {
-      flex: 1;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 5px 8px;
-      text-align: center;
-      transition: transform 0.15s;
+      flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 5px 8px; text-align: center; transition: transform 0.15s;
     }
     .hudItem.pulse { animation: scorePulse 0.4s ease-out; }
-    .hudLabel {
-      font-size: 9px;
-      text-transform: uppercase;
-      opacity: 0.65;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-    }
-    .hudValue {
-      font-size: 18px;
-      font-weight: 800;
-      color: #f1c40f;
-      line-height: 1.1;
-    }
+    .hudLabel { font-size: 9px; text-transform: uppercase; opacity: 0.65; letter-spacing: 0.5px; font-weight: 600; }
+    .hudValue { font-size: 18px; font-weight: 800; color: #f1c40f; line-height: 1.1; }
     .hudMenu {
-      flex: 0 0 44px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      color: #fff;
-      font-size: 18px;
-      cursor: pointer;
+      flex: 0 0 44px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; color: #fff; font-size: 18px; cursor: pointer;
       transition: transform 0.1s, background 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
     }
     .hudMenu:hover { background: rgba(255,255,255,0.12); }
     .hudMenu:active { transform: scale(0.9); }
     @keyframes scorePulse {
-      0%   { transform: scale(1); }
-      40%  { transform: scale(1.12); box-shadow: 0 0 18px rgba(241,196,15,0.55); }
+      0% { transform: scale(1); }
+      40% { transform: scale(1.12); box-shadow: 0 0 18px rgba(241,196,15,0.55); }
       100% { transform: scale(1); }
     }
-    #goalsPanel {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 6px;
-    }
+    #goalsPanel { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
     .goal {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 3px 10px 3px 6px;
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 3px 10px 3px 6px;
       transition: transform 0.2s, background 0.3s, border-color 0.3s;
     }
-    .goal.done {
-      background: rgba(46, 204, 113, 0.18);
-      border-color: rgba(46, 204, 113, 0.5);
-    }
+    .goal.done { background: rgba(46, 204, 113, 0.18); border-color: rgba(46, 204, 113, 0.5); }
     .goal.done .goalCount { color: #2ecc71; }
     .goal.pulse { animation: goalPulse 0.45s ease-out; }
     @keyframes goalPulse {
-      0%   { transform: scale(1); }
-      45%  { transform: scale(1.15); box-shadow: 0 0 22px rgba(241,196,15,0.6); }
+      0% { transform: scale(1); }
+      45% { transform: scale(1.15); box-shadow: 0 0 22px rgba(241,196,15,0.6); }
       100% { transform: scale(1); }
     }
     .goalIcon { display: block; }
     .goalCount { font-size: 13px; font-weight: 700; }
 
-    #controls {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-    }
+    #controls { display: flex; gap: 8px; margin-top: 10px; }
     #controls button {
-      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 12px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(102,126,234,0.35);
-      transition: transform 0.1s;
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%); color: #fff;
+      border: none; padding: 10px 16px; border-radius: 12px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(102,126,234,0.35); transition: transform 0.1s;
     }
     #controls button:active { transform: scale(0.94); }
     #controls button:disabled { opacity: 0.5; cursor: not-allowed; }
 
     #gameCanvas {
-      background: #0f1729;
-      border-radius: 16px;
-      box-shadow:
-        0 20px 60px rgba(0,0,0,0.6),
-        0 0 0 1px rgba(255,255,255,0.06),
-        inset 0 1px 0 rgba(255,255,255,0.05);
-      touch-action: none;
-      max-width: 100%;
-      max-height: calc(100vh - 280px);
-      width: auto;
-      height: auto;
+      background: #0f1729; border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.05);
+      touch-action: none; max-width: 100%; max-height: calc(100vh - 280px); width: auto; height: auto;
     }
 
     /* ========== OVERLAYS ========== */
     .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.88);
-      backdrop-filter: blur(6px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      z-index: 100;
-      padding: 20px;
-      text-align: center;
+      position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+      backdrop-filter: blur(6px); display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+      z-index: 100; padding: 20px; text-align: center;
     }
-    .overlay.active {
-      display: flex;
-      animation: overlayIn 0.35s ease-out;
-    }
-    @keyframes overlayIn {
-      from { opacity: 0; backdrop-filter: blur(0px); }
-      to   { opacity: 1; backdrop-filter: blur(6px); }
-    }
+    .overlay.active { display: flex; animation: overlayIn 0.35s ease-out; }
+    @keyframes overlayIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(6px); } }
     .overlay h2 {
-      font-size: 26px;
-      margin-bottom: 14px;
+      font-size: 26px; margin-bottom: 14px;
       background: linear-gradient(180deg, #fff 0%, #f1c40f 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      transform: translateY(-20px);
-      opacity: 0;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      transform: translateY(-20px); opacity: 0;
     }
-    .overlay.active h2 {
-      animation: titleDrop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.05s forwards;
-    }
+    .overlay.active h2 { animation: titleDrop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.05s forwards; }
     @keyframes titleDrop {
-      0%   { transform: translateY(-30px) scale(0.8); opacity: 0; }
-      60%  { transform: translateY(4px) scale(1.05); opacity: 1; }
+      0% { transform: translateY(-30px) scale(0.8); opacity: 0; }
+      60% { transform: translateY(4px) scale(1.05); opacity: 1; }
       100% { transform: translateY(0) scale(1); opacity: 1; }
     }
     .overlay p {
-      font-size: 15px;
-      margin-bottom: 22px;
-      opacity: 0;
-      white-space: pre-line;
-      line-height: 1.7;
-      max-height: 55vh;
-      overflow-y: auto;
-      font-family: 'Courier New', monospace;
-      transform: translateY(10px);
+      font-size: 15px; margin-bottom: 22px; opacity: 0;
+      white-space: pre-line; line-height: 1.7;
+      max-height: 55vh; overflow-y: auto;
+      font-family: 'Courier New', monospace; transform: translateY(10px);
     }
-    .overlay.active p {
-      animation: fadeUp2 0.5s ease 0.15s forwards;
-    }
-    @keyframes fadeUp2 {
-      to { opacity: 0.92; transform: translateY(0); }
-    }
+    .overlay.active p { animation: fadeUp2 0.5s ease 0.15s forwards; }
+    @keyframes fadeUp2 { to { opacity: 0.92; transform: translateY(0); } }
     .overlay button {
       background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.1s;
-      box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-      min-width: 180px;
-      opacity: 0;
-      transform: translateY(20px);
+      color: #fff; border: none; padding: 14px 28px; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: transform 0.1s; box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+      min-width: 180px; opacity: 0; transform: translateY(20px);
     }
-    .overlay.active button {
-      animation: btnUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.25s forwards;
-    }
+    .overlay.active button { animation: btnUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.25s forwards; }
     @keyframes btnUp {
-      0%   { opacity: 0; transform: translateY(20px) scale(0.9); }
-      60%  { opacity: 1; transform: translateY(-3px) scale(1.03); }
+      0% { opacity: 0; transform: translateY(20px) scale(0.9); }
+      60% { opacity: 1; transform: translateY(-3px) scale(1.03); }
       100% { opacity: 1; transform: translateY(0) scale(1); }
     }
     .overlay button:active { transform: scale(0.94); }
 
-    /* Win overlay */
-    .winStars {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 18px;
-      font-size: 46px;
-    }
-    .winStars .star {
-      color: rgba(255,255,255,0.15);
-      transition: color 0.4s;
-      transform: scale(0);
-    }
-    .winOverlayActive .winStars .star {
-      animation: starPop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
-    }
+    .winStars { display: flex; gap: 10px; margin-bottom: 18px; font-size: 46px; }
+    .winStars .star { color: rgba(255,255,255,0.15); transition: color 0.4s; transform: scale(0); }
+    .winOverlayActive .winStars .star { animation: starPop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
     .winStars .star:nth-child(1) { animation-delay: 0.35s; }
     .winStars .star:nth-child(2) { animation-delay: 0.6s; }
     .winStars .star:nth-child(3) { animation-delay: 0.85s; }
-    .winStars .star.filled {
-      color: #f1c40f;
-      text-shadow: 0 0 22px rgba(241,196,15,0.7);
-    }
+    .winStars .star.filled { color: #f1c40f; text-shadow: 0 0 22px rgba(241,196,15,0.7); }
     @keyframes starPop {
-      0%   { transform: scale(0) rotate(-180deg); }
-      60%  { transform: scale(1.4) rotate(15deg); }
+      0% { transform: scale(0) rotate(-180deg); }
+      60% { transform: scale(1.4) rotate(15deg); }
       100% { transform: scale(1) rotate(0); }
     }
-    .winStats {
-      display: flex;
-      gap: 16px;
-      margin-bottom: 24px;
-      justify-content: center;
-      flex-wrap: wrap;
-      opacity: 0;
-    }
-    .winOverlayActive .winStats {
-      animation: fadeUp2 0.5s ease 0.4s forwards;
-    }
-    .winStat {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 12px;
-      padding: 8px 16px;
-      min-width: 100px;
-    }
-    .winStatLabel {
-      font-size: 10px;
-      letter-spacing: 1px;
-      opacity: 0.6;
-      text-transform: uppercase;
-    }
-    .winStatValue {
-      font-size: 20px;
-      font-weight: 800;
-      color: #f1c40f;
-    }
-    .winButtons {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    .winOverlayActive .winButtons {
-      animation: btnUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.6s forwards;
-    }
+    .winStats { display: flex; gap: 16px; margin-bottom: 24px; justify-content: center; flex-wrap: wrap; opacity: 0; }
+    .winOverlayActive .winStats { animation: fadeUp2 0.5s ease 0.4s forwards; }
+    .winStat { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 8px 16px; min-width: 100px; }
+    .winStatLabel { font-size: 10px; letter-spacing: 1px; opacity: 0.6; text-transform: uppercase; }
+    .winStatValue { font-size: 20px; font-weight: 800; color: #f1c40f; }
+    .winButtons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(20px); }
+    .winOverlayActive .winButtons { animation: btnUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.6s forwards; }
     .winButtons button {
       background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
-      border: none;
-      padding: 14px 28px;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: transform 0.1s;
-      box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-      min-width: 140px;
+      color: #fff; border: none; padding: 14px 28px; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: transform 0.1s; box-shadow: 0 4px 12px rgba(102,126,234,0.4); min-width: 140px;
     }
-    .winButtons button#winNextBtn {
-      background: linear-gradient(180deg, #f7b733 0%, #fc4a1a 100%);
-      box-shadow: 0 4px 12px rgba(252,74,26,0.45);
-    }
+    .winButtons button#winNextBtn { background: linear-gradient(180deg, #f7b733 0%, #fc4a1a 100%); box-shadow: 0 4px 12px rgba(252,74,26,0.45); }
     .winButtons button:active { transform: scale(0.94); }
 
-    /* ========== TOAST ========== */
     #toast {
-      position: fixed;
-      bottom: 30px;
-      left: 50%;
+      position: fixed; bottom: 30px; left: 50%;
       transform: translateX(-50%) translateY(80px) scale(0.9);
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: #fff;
-      padding: 12px 22px;
-      border-radius: 14px;
-      font-weight: 700;
-      font-size: 14px;
+      background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+      padding: 12px 22px; border-radius: 14px; font-weight: 700; font-size: 14px;
       box-shadow: 0 8px 30px rgba(102,126,234,0.5);
       opacity: 0;
       transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
-      z-index: 150;
-      pointer-events: none;
-      white-space: nowrap;
+      z-index: 150; pointer-events: none; white-space: nowrap;
     }
-    #toast.show {
-      transform: translateX(-50%) translateY(0) scale(1);
-      opacity: 1;
-    }
+    #toast.show { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
 
-    /* Level intro flash */
     #levelFlash {
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       background: radial-gradient(circle at 50% 50%, rgba(241,196,15,0.6) 0%, transparent 70%);
-      pointer-events: none;
-      opacity: 0;
-      z-index: 50;
+      pointer-events: none; opacity: 0; z-index: 50;
     }
-    #levelFlash.flash {
-      animation: levelFlash 0.7s ease-out forwards;
-    }
-    @keyframes levelFlash {
-      0%   { opacity: 0; }
-      20%  { opacity: 0.9; }
-      100% { opacity: 0; }
-    }
+    #levelFlash.flash { animation: levelFlash 0.7s ease-out forwards; }
+    @keyframes levelFlash { 0% { opacity: 0; } 20% { opacity: 0.9; } 100% { opacity: 0; } }
 
     @media (max-width: 520px) {
       .gameTitle { font-size: 40px; }
@@ -771,17 +408,30 @@
       <div class="orbit"><div class="shape s4"></div></div>
       <div class="loadCenter"></div>
     </div>
-    <div class="loadText">Загрузка<span class="loadDots"></span></div>
+    <div class="loadText"><span id="loadingText">Загрузка</span><span class="loadDots"></span></div>
   </div>
 
   <div id="levelFlash"></div>
 
+  <button class="langBtn" id="langBtn">
+    <span id="langBtnFlag">🇷🇺</span>
+    <span id="langBtnCode">RU</span>
+  </button>
+
+  <div class="langModal" id="langModal">
+    <div class="langModalInner">
+      <div class="langModalTitle" id="langModalTitle">Язык</div>
+      <div id="langList"></div>
+      <button class="langClose" id="langCloseBtn">Закрыть</button>
+    </div>
+  </div>
+
   <div id="menuScreen" class="screen active">
     <div class="gameTitle" id="gameTitleEl"></div>
-    <div class="subtitle">ГЕОМЕТРИЯ</div>
+    <div class="subtitle" id="subtitleEl">ГЕОМЕТРИЯ</div>
 
     <div class="menuBest">
-      <div class="menuBestLabel">🏆 Рекорд</div>
+      <div class="menuBestLabel" id="menuBestLabel">🏆 Рекорд</div>
       <div class="menuBestValue" id="menuBestScore">0</div>
     </div>
 
@@ -791,18 +441,18 @@
     </button>
     <button class="menuBtn" id="levelsBtn">
       <span class="menuBtnIcon">🎯</span>
-      <span>УРОВНИ</span>
+      <span id="levelsBtnText">УРОВНИ</span>
     </button>
     <button class="menuBtn" id="recordsBtn">
       <span class="menuBtnIcon">🏆</span>
-      <span>РЕКОРДЫ</span>
+      <span id="recordsBtnText">РЕКОРДЫ</span>
     </button>
   </div>
 
   <div id="levelScreen" class="screen">
     <div class="screenHeader">
       <button class="backBtn" id="levelsBackBtn">←</button>
-      <div class="screenTitle">Уровни</div>
+      <div class="screenTitle" id="levelsTitle">Уровни</div>
       <div class="screenSub" id="levelsCounter">0/30</div>
     </div>
     <div id="levelsContainer"></div>
@@ -813,15 +463,15 @@
       <div id="hudTop">
         <button class="hudMenu" id="gameMenuBtn">☰</button>
         <div class="hudItem" id="levelBox">
-          <div class="hudLabel">Уровень</div>
+          <div class="hudLabel" id="hudLevelLabel">Уровень</div>
           <div class="hudValue" id="levelValue">1</div>
         </div>
         <div class="hudItem" id="movesBox">
-          <div class="hudLabel">Ходы</div>
+          <div class="hudLabel" id="hudMovesLabel">Ходы</div>
           <div class="hudValue" id="movesValue">25</div>
         </div>
         <div class="hudItem" id="scoreBox">
-          <div class="hudLabel">Очки</div>
+          <div class="hudLabel" id="hudScoreLabel">Очки</div>
           <div class="hudValue" id="scoreValue">0</div>
         </div>
       </div>
@@ -829,7 +479,7 @@
     </div>
     <canvas id="gameCanvas" width="480" height="480"></canvas>
     <div id="controls">
-      <button id="hintBtn">💡 Подсказка</button>
+      <button id="hintBtn">💡 <span id="hintBtnText">Подсказка</span></button>
     </div>
   </div>
 
@@ -848,11 +498,11 @@
     </div>
     <div class="winStats">
       <div class="winStat">
-        <div class="winStatLabel">Очки</div>
+        <div class="winStatLabel" id="winScoreLabel">Очки</div>
         <div class="winStatValue" id="winScore">0</div>
       </div>
       <div class="winStat">
-        <div class="winStatLabel">Ходы</div>
+        <div class="winStatLabel" id="winMovesLabel">Ходы</div>
         <div class="winStatValue" id="winMoves">0/25</div>
       </div>
     </div>
@@ -866,6 +516,246 @@
 
   <script>
   'use strict';
+
+  /* ============================================================
+   *  ЛОКАЛИЗАЦИЯ — 3 ЯЗЫКА
+   * ============================================================ */
+  const TRANSLATIONS = {
+    ru: {
+      _flag: '🇷🇺', _name: 'Русский',
+      loading: 'Загрузка',
+      subtitle: 'ГЕОМЕТРИЯ',
+      bestScore: '🏆 Рекорд',
+      play: 'ИГРАТЬ',
+      continue: 'ПРОДОЛЖИТЬ',
+      playAgain: 'ИГРАТЬ СНОВА',
+      levels: 'УРОВНИ',
+      records: 'РЕКОРДЫ',
+      level: 'Уровень',
+      moves: 'Ходы',
+      score: 'Очки',
+      hint: 'Подсказка',
+      world1: 'Мир 1 · Знакомство',
+      world2: 'Мир 2 · Новые фигуры',
+      world3: 'Мир 3 · Двойные цели',
+      world4: 'Мир 4 · Мастерство',
+      world5: 'Мир 5 · Испытание',
+      levelComplete: 'Уровень пройден!',
+      allComplete: '🏆 Все уровни пройдены!',
+      nextLevel: 'Далее',
+      toMenu: 'В меню',
+      pause: 'Пауза',
+      retry: 'Попробовать снова',
+      outOfMoves: '😔 Не получилось',
+      outOfMovesText: 'Ходы закончились!',
+      progress: 'Прогресс',
+      unlocked: '🎉 Открыт уровень {n}!',
+      locked: '🔒 Уровень заблокирован',
+      leaderboard: '🏆 Рекорды',
+      leaderboardUnavailable: 'Лидерборд доступен только на Яндекс Играх.',
+      noResults: 'Пока нет результатов.\nСыграйте партию!',
+      yourBest: 'Ваш рекорд',
+      close: 'Закрыть',
+      ok: 'OK',
+      language: 'Язык',
+      shapeNames: {
+        circle:   { one: 'круга',          many: 'кругов' },
+        square:   { one: 'квадрата',       many: 'квадратов' },
+        triangle: { one: 'треугольника',   many: 'треугольников' },
+        diamond:  { one: 'ромба',          many: 'ромбов' },
+        pentagon: { one: 'пятиугольника',  many: 'пятиугольников' },
+        hexagon:  { one: 'шестиугольника', many: 'шестиугольников' },
+        star:     { one: 'звезды',         many: 'звёзд' }
+      }
+    },
+    en: {
+      _flag: '🇬🇧', _name: 'English',
+      loading: 'Loading',
+      subtitle: 'GEOMETRY',
+      bestScore: '🏆 Best',
+      play: 'PLAY',
+      continue: 'CONTINUE',
+      playAgain: 'PLAY AGAIN',
+      levels: 'LEVELS',
+      records: 'RECORDS',
+      level: 'Level',
+      moves: 'Moves',
+      score: 'Score',
+      hint: 'Hint',
+      world1: 'World 1 · Introduction',
+      world2: 'World 2 · New Shapes',
+      world3: 'World 3 · Double Goals',
+      world4: 'World 4 · Mastery',
+      world5: 'World 5 · Trial',
+      levelComplete: 'Level Complete!',
+      allComplete: '🏆 All Levels Complete!',
+      nextLevel: 'Next',
+      toMenu: 'Menu',
+      pause: 'Pause',
+      retry: 'Try Again',
+      outOfMoves: '😔 Out of moves',
+      outOfMovesText: 'No moves left!',
+      progress: 'Progress',
+      unlocked: '🎉 Level {n} unlocked!',
+      locked: '🔒 Level locked',
+      leaderboard: '🏆 Leaderboard',
+      leaderboardUnavailable: 'Leaderboard is available only on Yandex Games.',
+      noResults: 'No results yet.\nPlay a game!',
+      yourBest: 'Your best',
+      close: 'Close',
+      ok: 'OK',
+      language: 'Language',
+      shapeNames: {
+        circle:   { one: 'circle',    many: 'circles' },
+        square:   { one: 'square',    many: 'squares' },
+        triangle: { one: 'triangle',  many: 'triangles' },
+        diamond:  { one: 'diamond',   many: 'diamonds' },
+        pentagon: { one: 'pentagon',  many: 'pentagons' },
+        hexagon:  { one: 'hexagon',   many: 'hexagons' },
+        star:     { one: 'star',      many: 'stars' }
+      }
+    },
+    tr: {
+      _flag: '🇹🇷', _name: 'Türkçe',
+      loading: 'Yükleniyor',
+      subtitle: 'GEOMETRİ',
+      bestScore: '🏆 Rekor',
+      play: 'OYNA',
+      continue: 'DEVAM ET',
+      playAgain: 'TEKRAR OYNA',
+      levels: 'BÖLÜMLER',
+      records: 'REKORLAR',
+      level: 'Bölüm',
+      moves: 'Hamle',
+      score: 'Puan',
+      hint: 'İpucu',
+      world1: 'Dünya 1 · Tanışma',
+      world2: 'Dünya 2 · Yeni Şekiller',
+      world3: 'Dünya 3 · Çift Hedef',
+      world4: 'Dünya 4 · Ustalık',
+      world5: 'Dünya 5 · Sınav',
+      levelComplete: 'Bölüm Tamamlandı!',
+      allComplete: '🏆 Tüm Bölümler Tamam!',
+      nextLevel: 'Sonraki',
+      toMenu: 'Menü',
+      pause: 'Duraklat',
+      retry: 'Tekrar Dene',
+      outOfMoves: '😔 Hamle bitti',
+      outOfMovesText: 'Hamle kalmadı!',
+      progress: 'İlerleme',
+      unlocked: '🎉 Bölüm {n} açıldı!',
+      locked: '🔒 Bölüm kilitli',
+      leaderboard: '🏆 Rekorlar',
+      leaderboardUnavailable: 'Liderlik tablosu yalnızca Yandex Oyunlar\'da mevcuttur.',
+      noResults: 'Henüz sonuç yok.\nBir oyun oynayın!',
+      yourBest: 'En iyiniz',
+      close: 'Kapat',
+      ok: 'Tamam',
+      language: 'Dil',
+      shapeNames: {
+        circle:   { one: 'daire',   many: 'daire' },
+        square:   { one: 'kare',    many: 'kare' },
+        triangle: { one: 'üçgen',   many: 'üçgen' },
+        diamond:  { one: 'elmas',   many: 'elmas' },
+        pentagon: { one: 'beşgen',  many: 'beşgen' },
+        hexagon:  { one: 'altıgen', many: 'altıgen' },
+        star:     { one: 'yıldız',  many: 'yıldız' }
+      }
+    }
+  };
+
+  const AVAILABLE_LANGS = [
+    { code: 'ru', flag: '🇷🇺', name: 'Русский' },
+    { code: 'en', flag: '🇬🇧', name: 'English' },
+    { code: 'tr', flag: '🇹🇷', name: 'Türkçe' }
+  ];
+
+  let currentLang = 'ru';
+
+  function t(key, params = {}) {
+    const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.ru;
+    let text = dict[key] !== undefined ? dict[key] : (TRANSLATIONS.ru[key] || key);
+    for (const k in params) {
+      text = text.replace(new RegExp('\\{' + k + '\\}', 'g'), params[k]);
+    }
+    return text;
+  }
+
+  function shapeName(shape, count) {
+    const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.ru;
+    const names = dict.shapeNames && dict.shapeNames[shape];
+    if (!names) return shape;
+    if (currentLang === 'ru') {
+      const n = count % 100;
+      if (n >= 11 && n <= 19) return names.many;
+      const d = count % 10;
+      if (d === 1) return names.one;
+      if (d >= 2 && d <= 4) return names.one;
+      return names.many;
+    }
+    return count === 1 ? names.one : names.many;
+  }
+
+  function applyTranslations() {
+    document.getElementById('loadingText').textContent = t('loading');
+    document.getElementById('subtitleEl').textContent = t('subtitle');
+    document.getElementById('menuBestLabel').textContent = t('bestScore');
+    document.getElementById('playBtnText').textContent = t('play');
+    document.getElementById('levelsBtnText').textContent = t('levels');
+    document.getElementById('recordsBtnText').textContent = t('records');
+    document.getElementById('levelsTitle').textContent = t('levels');
+    document.getElementById('hudLevelLabel').textContent = t('level');
+    document.getElementById('hudMovesLabel').textContent = t('moves');
+    document.getElementById('hudScoreLabel').textContent = t('score');
+    document.getElementById('hintBtnText').textContent = t('hint');
+    document.getElementById('winScoreLabel').textContent = t('score');
+    document.getElementById('winMovesLabel').textContent = t('moves');
+    document.getElementById('langModalTitle').textContent = t('language');
+    document.getElementById('langCloseBtn').textContent = t('close');
+
+    const lang = AVAILABLE_LANGS.find(l => l.code === currentLang);
+    if (lang) {
+      document.getElementById('langBtnFlag').textContent = lang.flag;
+      document.getElementById('langBtnCode').textContent = lang.code.toUpperCase();
+    }
+
+    buildTitleLetters(currentLang === 'ru' ? 'ТРИ В РЯД' : 'MATCH 3');
+
+    updateMenuUI();
+
+    if (levelScreen.classList.contains('active')) renderLevelsGrid();
+  }
+
+  function setLanguage(code) {
+    if (!TRANSLATIONS[code]) code = 'en';
+    currentLang = code;
+    applyTranslations();
+    try { localStorage.setItem('match3_lang', code); } catch (e) {}
+  }
+
+  async function detectLanguage() {
+    try {
+      const saved = localStorage.getItem('match3_lang');
+      if (saved && TRANSLATIONS[saved]) return saved;
+    } catch (e) {}
+
+    try {
+      if (typeof YaGames !== 'undefined') {
+        const ysdk = await YaGames.init();
+        const lang = ysdk.environment.i18n.lang;
+        if (TRANSLATIONS[lang]) return lang;
+        if (['be', 'kk', 'uk', 'uz'].includes(lang)) return 'ru';
+        return 'en';
+      }
+    } catch (e) {
+      console.warn('[i18n] Ошибка определения языка через SDK:', e);
+    }
+
+    const browserLang = (navigator.language || 'en').split('-')[0];
+    if (TRANSLATIONS[browserLang]) return browserLang;
+    if (['be', 'kk', 'uk', 'uz'].includes(browserLang)) return 'ru';
+    return 'en';
+  }
 
   /* ============================================================
    *  YANDEX SDK WRAPPER
@@ -959,24 +849,24 @@
    *  ФИГУРЫ
    * ============================================================ */
   const SHAPE_INFO = {
-    circle:   { color: '#e74c3c', light: '#ff9a9a', dark: '#9b1c1c', name: 'кругов',          acc: 'круга' },
-    square:   { color: '#3498db', light: '#8ecdf8', dark: '#155284', name: 'квадратов',       acc: 'квадрата' },
-    triangle: { color: '#2ecc71', light: '#7bf5b5', dark: '#157a3b', name: 'треугольников',   acc: 'треугольника' },
-    diamond:  { color: '#f1c40f', light: '#fff2a8', dark: '#a8850a', name: 'ромбов',          acc: 'ромба' },
-    pentagon: { color: '#9b59b6', light: '#c9a7f5', dark: '#59247a', name: 'пятиугольников',  acc: 'пятиугольника' },
-    hexagon:  { color: '#e67e22', light: '#ffc39c', dark: '#9c3f0d', name: 'шестиугольников', acc: 'шестиугольника' },
-    star:     { color: '#1abc9c', light: '#7ef0da', dark: '#0e7d68', name: 'звёзд',           acc: 'звезды' }
+    circle:   { color: '#e74c3c', light: '#ff9a9a', dark: '#9b1c1c' },
+    square:   { color: '#3498db', light: '#8ecdf8', dark: '#155284' },
+    triangle: { color: '#2ecc71', light: '#7bf5b5', dark: '#157a3b' },
+    diamond:  { color: '#f1c40f', light: '#fff2a8', dark: '#a8850a' },
+    pentagon: { color: '#9b59b6', light: '#c9a7f5', dark: '#59247a' },
+    hexagon:  { color: '#e67e22', light: '#ffc39c', dark: '#9c3f0d' },
+    star:     { color: '#1abc9c', light: '#7ef0da', dark: '#0e7d68' }
   };
 
   /* ============================================================
    *  30 УРОВНЕЙ — 5 МИРОВ
    * ============================================================ */
   const WORLDS = [
-    { name: 'Мир 1 · Знакомство',    from: 1,  to: 6  },
-    { name: 'Мир 2 · Новые фигуры',  from: 7,  to: 12 },
-    { name: 'Мир 3 · Двойные цели',  from: 13, to: 18 },
-    { name: 'Мир 4 · Мастерство',    from: 19, to: 24 },
-    { name: 'Мир 5 · Испытание',     from: 25, to: 30 }
+    { nameKey: 'world1', from: 1,  to: 6  },
+    { nameKey: 'world2', from: 7,  to: 12 },
+    { nameKey: 'world3', from: 13, to: 18 },
+    { nameKey: 'world4', from: 19, to: 24 },
+    { nameKey: 'world5', from: 25, to: 30 }
   ];
 
   const LEVELS = [
@@ -986,28 +876,24 @@
     { moves: 28, shapes: ['circle','square','triangle','diamond'], goals: [{ shape: 'diamond', count: 12 }] },
     { moves: 30, shapes: ['circle','square','triangle','diamond'], goals: [{ shape: 'circle', count: 10 }, { shape: 'square', count: 10 }] },
     { moves: 30, shapes: ['circle','square','triangle','diamond'], goals: [{ shape: 'triangle', count: 12 }, { shape: 'diamond', count: 10 }] },
-
     { moves: 30, shapes: ['circle','square','triangle','diamond','pentagon'], goals: [{ shape: 'pentagon', count: 15 }] },
     { moves: 32, shapes: ['circle','square','triangle','diamond','pentagon'], goals: [{ shape: 'circle', count: 15 }] },
     { moves: 32, shapes: ['circle','square','triangle','pentagon','hexagon'], goals: [{ shape: 'hexagon', count: 15 }] },
     { moves: 32, shapes: ['circle','square','triangle','pentagon','hexagon'], goals: [{ shape: 'pentagon', count: 12 }, { shape: 'hexagon', count: 12 }] },
     { moves: 34, shapes: ['square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 15 }] },
     { moves: 34, shapes: ['square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'square', count: 15 }] },
-
     { moves: 36, shapes: ['circle','triangle','diamond','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'triangle', count: 12 }] },
     { moves: 36, shapes: ['circle','square','triangle','diamond','pentagon'], goals: [{ shape: 'circle', count: 15 }, { shape: 'square', count: 15 }] },
     { moves: 38, shapes: ['circle','square','triangle','pentagon','hexagon'], goals: [{ shape: 'triangle', count: 15 }, { shape: 'hexagon', count: 15 }] },
     { moves: 40, shapes: ['circle','square','diamond','pentagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'pentagon', count: 12 }] },
     { moves: 40, shapes: ['circle','square','triangle','diamond','pentagon','hexagon'], goals: [{ shape: 'triangle', count: 12 }, { shape: 'hexagon', count: 12 }] },
     { moves: 42, shapes: ['circle','square','triangle','diamond','pentagon','hexagon'], goals: [{ shape: 'circle', count: 15 }, { shape: 'diamond', count: 15 }] },
-
     { moves: 42, shapes: ['circle','triangle','diamond','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'hexagon', count: 12 }] },
     { moves: 44, shapes: ['circle','square','triangle','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 10 }, { shape: 'circle', count: 10 }, { shape: 'pentagon', count: 10 }] },
     { moves: 44, shapes: ['circle','square','triangle','diamond','hexagon','star'], goals: [{ shape: 'diamond', count: 12 }, { shape: 'hexagon', count: 12 }] },
     { moves: 46, shapes: ['square','triangle','diamond','pentagon','hexagon','star'], goals: [{ shape: 'triangle', count: 12 }, { shape: 'star', count: 12 }] },
     { moves: 46, shapes: ['circle','square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'square', count: 12 }, { shape: 'pentagon', count: 12 }] },
     { moves: 48, shapes: ['circle','triangle','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'triangle', count: 12 }, { shape: 'pentagon', count: 12 }] },
-
     { moves: 48, shapes: ['circle','square','triangle','pentagon','hexagon','star'], goals: [{ shape: 'circle', count: 15 }, { shape: 'hexagon', count: 15 }] },
     { moves: 50, shapes: ['circle','square','triangle','diamond','pentagon','hexagon'], goals: [{ shape: 'circle', count: 15 }, { shape: 'diamond', count: 15 }, { shape: 'square', count: 15 }] },
     { moves: 50, shapes: ['circle','square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 15 }, { shape: 'pentagon', count: 15 }] },
@@ -1110,11 +996,15 @@
   const toast = document.getElementById('toast');
   const levelFlash = document.getElementById('levelFlash');
 
+  const langBtn = document.getElementById('langBtn');
+  const langModal = document.getElementById('langModal');
+  const langList = document.getElementById('langList');
+  const langCloseBtn = document.getElementById('langCloseBtn');
+
   /* ============================================================
    *  TITLE LETTERS
    * ============================================================ */
-  function buildTitleLetters() {
-    const text = 'ТРИ В РЯД';
+  function buildTitleLetters(text) {
     gameTitleEl.innerHTML = '';
     [...text].forEach((ch, i) => {
       const span = document.createElement('span');
@@ -1124,9 +1014,7 @@
       gameTitleEl.appendChild(span);
     });
   }
-  buildTitleLetters();
 
-  // Перезапускаем анимацию букв при каждом показе меню
   function replayTitleAnimation() {
     const letters = gameTitleEl.querySelectorAll('.letter');
     letters.forEach((el, i) => {
@@ -1137,10 +1025,49 @@
   }
 
   /* ============================================================
+   *  LANGUAGE SWITCHER
+   * ============================================================ */
+  function openLangModal() {
+    langList.innerHTML = '';
+    AVAILABLE_LANGS.forEach(lang => {
+      const item = document.createElement('div');
+      item.className = 'langItem' + (lang.code === currentLang ? ' current' : '');
+
+      const flag = document.createElement('span');
+      flag.className = 'flag';
+      flag.textContent = lang.flag;
+
+      const name = document.createElement('span');
+      name.textContent = lang.name;
+
+      const check = document.createElement('span');
+      check.className = 'check';
+      check.textContent = '✓';
+
+      item.appendChild(flag);
+      item.appendChild(name);
+      item.appendChild(check);
+
+      item.addEventListener('click', () => {
+        setLanguage(lang.code);
+        langModal.classList.remove('active');
+      });
+
+      langList.appendChild(item);
+    });
+    langModal.classList.add('active');
+  }
+
+  langBtn.addEventListener('click', openLangModal);
+  langCloseBtn.addEventListener('click', () => langModal.classList.remove('active'));
+  langModal.addEventListener('click', (e) => {
+    if (e.target === langModal) langModal.classList.remove('active');
+  });
+
+  /* ============================================================
    *  SCREENS
    * ============================================================ */
   function showScreen(name) {
-    // Останавливаем старый экран
     [menuScreen, levelScreen, gameScreen].forEach(s => {
       if (s.classList.contains('active')) {
         s.classList.remove('active');
@@ -1151,10 +1078,8 @@
       }
     });
 
-    // Показываем новый через паузу
     setTimeout(() => {
       if (name === 'menu') {
-        // Перезапускаем анимации букв и кнопок
         replayTitleAnimation();
         const buttons = menuScreen.querySelectorAll('.menuBtn');
         buttons.forEach((b, i) => {
@@ -1186,11 +1111,11 @@
     menuBestScoreEl.textContent = progress.bestScore;
     const next = progress.unlockedLevel;
     if (next === 1 && Object.keys(progress.levelStars).length === 0) {
-      playBtnText.textContent = 'ИГРАТЬ';
+      playBtnText.textContent = t('play');
     } else if (next > LEVELS.length) {
-      playBtnText.textContent = 'ИГРАТЬ СНОВА';
+      playBtnText.textContent = t('playAgain');
     } else {
-      playBtnText.textContent = `ПРОДОЛЖИТЬ · УР. ${next}`;
+      playBtnText.textContent = `${t('continue')} · ${t('level')} ${next}`;
     }
   }
 
@@ -1220,7 +1145,7 @@
     WORLDS.forEach(world => {
       const label = document.createElement('div');
       label.className = 'worldLabel';
-      label.textContent = world.name;
+      label.textContent = t(world.nameKey);
       levelsContainer.appendChild(label);
 
       const grid = document.createElement('div');
@@ -1238,7 +1163,6 @@
         if (isCompleted) tile.classList.add('completed');
         if (isCurrent) tile.classList.add('current');
 
-        // Задержка для каскадного появления
         tile.style.animationDelay = (tileIndex * 0.035) + 's';
         tileIndex++;
 
@@ -1566,7 +1490,6 @@
     ctx.save();
     ctx.globalAlpha = tile.alpha;
 
-    // Вращение
     if (tile.rotation !== 0) {
       ctx.translate(cx, cy);
       ctx.rotate(tile.rotation);
@@ -1831,7 +1754,7 @@
       avgC * TILE_SIZE + TILE_SIZE / 2,
       avgR * TILE_SIZE + TILE_SIZE / 2,
       `+${gained}`,
-      combo > 1 ? `КОМБО x${combo}` : null
+      combo > 1 ? `COMBO x${combo}` : null
     );
 
     await Promise.all(matches.map(({ r, c }) =>
@@ -2056,7 +1979,7 @@
   async function startLevel(n) {
     if (n < 1 || n > LEVELS.length) n = 1;
     if (n > progress.unlockedLevel) {
-      showToast('🔒 Уровень заблокирован');
+      showToast(t('locked'));
       return;
     }
 
@@ -2064,7 +1987,6 @@
     overlay.classList.remove('active');
     showScreen('game');
 
-    // Небольшая задержка для смены экрана
     await sleep(450);
 
     gameState = 'intro';
@@ -2084,7 +2006,6 @@
     progress.currentLevel = n;
     initBoard();
 
-    // Прячем фишки со всех сторон с зачатками анимации
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const tile = board[r][c];
@@ -2101,11 +2022,9 @@
     buildGoalsPanel();
     updateGoalsUI();
 
-    // Флеш
     flashLevel();
     shakeScreen(6);
 
-    // КРАСИВАЯ ВОЛНОВАЯ АНИМАЦИЯ: центр → края, с вращением и bounce
     const centerR = (ROWS - 1) / 2;
     const centerC = (COLS - 1) / 2;
     const maxDist = Math.hypot(centerR, centerC);
@@ -2115,24 +2034,18 @@
       for (let c = 0; c < COLS; c++) {
         const tile = board[r][c];
         const dist = Math.hypot(r - centerR, c - centerC);
-        // Задержка растёт от центра к краям
         const delay = (dist / maxDist) * 340 + Math.random() * 40;
 
         promises.push(Promise.all([
-          // Основное падение — с bounce
           tween(tile, { offsetY: 0 }, 620, easeOutBounce, delay),
-          // Проявление
           tween(tile, { alpha: 1 }, 260, easeOutCubic, delay),
-          // Плавное вращение к 0
           tween(tile, { rotation: 0 }, 700, easeOutBack, delay),
-          // Увеличение с лёгким overshoot
           tween(tile, { scale: 1 }, 520, easeOutElastic, delay)
         ]));
       }
     }
     await Promise.all(promises);
 
-    // Финальная вспышка
     flashLevel();
 
     busy = false;
@@ -2170,11 +2083,12 @@
     await saveProgress();
 
     const isLast = currentLevel >= LEVELS.length;
-    winTitle.textContent = isLast ? '🏆 Все уровни пройдены!' : 'Уровень пройден!';
+    winTitle.textContent = isLast ? t('allComplete') : t('levelComplete');
     winScore.textContent = score;
     winMoves.textContent = `${usedMoves}/${currentLevelData.moves}`;
+    winMenuBtn.textContent = t('toMenu');
+    winNextBtn.textContent = t('nextLevel');
 
-    // Сброс анимации звёзд
     [...winStars.querySelectorAll('.star')].forEach((el, i) => {
       el.classList.remove('filled');
       if (i < stars) el.classList.add('filled');
@@ -2182,12 +2096,11 @@
 
     winNextBtn.style.display = isLast ? 'none' : '';
 
-    // Запускаем анимацию появления overlay
     winOverlay.classList.add('active');
     winOverlay.classList.add('winOverlayActive');
 
     if (unlockedNew) {
-      setTimeout(() => showToast(`🎉 Открыт уровень ${currentLevel + 1}!`, 2500), 1400);
+      setTimeout(() => showToast(t('unlocked', { n: currentLevel + 1 }), 2500), 1400);
     }
   }
 
@@ -2198,14 +2111,14 @@
 
     const goalLines = currentLevelData.goals.map(g => {
       const cur = Math.min(goalsProgress[g.shape], g.count);
-      const name = g.count >= 5 ? SHAPE_INFO[g.shape].name : SHAPE_INFO[g.shape].acc;
+      const name = shapeName(g.shape, g.count);
       return `• ${cur}/${g.count} ${name}`;
     }).join('\n');
 
     await new Promise(resolve => {
-      overlayTitle.textContent = '😔 Не получилось';
-      overlayText.textContent = `Ходы закончились!\n\nПрогресс:\n${goalLines}\n\nОчки: ${score}`;
-      overlayBtn.textContent = 'Попробовать снова';
+      overlayTitle.textContent = t('outOfMoves');
+      overlayText.textContent = `${t('outOfMovesText')}\n\n${t('progress')}:\n${goalLines}\n\n${t('score')}: ${score}`;
+      overlayBtn.textContent = t('retry');
       overlay.classList.add('active');
       let resolved = false;
       const finish = () => {
@@ -2228,22 +2141,22 @@
    * ============================================================ */
   async function showRecords() {
     if (!YSDK.ready) {
-      await showOverlay('🏆 Рекорды',
-        `Лидерборд доступен только на Яндекс Играх.\n\nВаш рекорд: ${progress.bestScore}`, 'OK');
+      await showOverlay(t('leaderboard'),
+        `${t('leaderboardUnavailable')}\n\n${t('yourBest')}: ${progress.bestScore}`, t('ok'));
       return;
     }
     const entries = await YSDK.getLeaderboard();
     if (!entries || !entries.entries || entries.entries.length === 0) {
-      await showOverlay('🏆 Рекорды',
-        `Пока нет результатов.\nСыграйте партию!\n\nВаш рекорд: ${progress.bestScore}`, 'OK');
+      await showOverlay(t('leaderboard'),
+        `${t('noResults')}\n\n${t('yourBest')}: ${progress.bestScore}`, t('ok'));
       return;
     }
     const lines = entries.entries.slice(0, 10).map((e, i) => {
-      const name = (e.player && e.player.publicName) || 'Игрок';
+      const name = (e.player && e.player.publicName) || 'Player';
       const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
       return `${medal} ${name} — ${e.score}`;
     }).join('\n');
-    await showOverlay('🏆 Рекорды', lines, 'Закрыть');
+    await showOverlay(t('leaderboard'), lines, t('close'));
   }
 
   /* ============================================================
@@ -2264,9 +2177,9 @@
     YSDK.gameplayStop();
 
     const action = await new Promise(resolve => {
-      overlayTitle.textContent = 'Пауза';
-      overlayText.textContent = `Уровень ${currentLevel}\nОчки: ${score}\nХоды: ${movesLeft}`;
-      overlayBtn.textContent = 'В меню';
+      overlayTitle.textContent = t('pause');
+      overlayText.textContent = `${t('level')} ${currentLevel}\n${t('score')}: ${score}\n${t('moves')}: ${movesLeft}`;
+      overlayBtn.textContent = t('toMenu');
       overlay.classList.add('active');
       overlayBtn.onclick = () => {
         overlay.classList.remove('active');
@@ -2311,14 +2224,15 @@
   async function start() {
     requestAnimationFrame(gameLoop);
 
-    // Минимум времени на лоадер, чтобы анимация была видна
-    const loadPromise = (async () => {
-      await YSDK.init();
-      await loadProgress();
-    })();
+    const lang = await detectLanguage();
+    currentLang = lang;
 
-    await Promise.all([loadPromise, sleep(1600)]);
+    await YSDK.init();
+    await loadProgress();
 
+    applyTranslations();
+
+    await sleep(1200);
     document.getElementById('loading').classList.add('hidden');
     setTimeout(() => {
       showScreen('menu');
