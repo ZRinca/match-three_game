@@ -4,8 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Match 3 — Geometry</title>
-  <!-- VK Bridge -->
+  <!-- VK Bridge + фолбэк на jsdelivr, если unpkg недоступен -->
   <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+  <script>
+    if (typeof vkBridge === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js"><\/script>');
+    }
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body {
@@ -768,105 +773,106 @@
     launchParams: null,
     user: null,
 
+    // Единая точка отправки с таймаутом — чтобы ничего не висло вечно
+    _send(method, params, timeoutMs = 3000) {
+      if (typeof vkBridge === 'undefined') {
+        return Promise.reject(new Error('vkBridge not loaded'));
+      }
+      return new Promise((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+          if (!settled) { settled = true; reject(new Error('timeout: ' + method)); }
+        }, timeoutMs);
+        try {
+          vkBridge.send(method, params)
+            .then(res => { if (!settled) { settled = true; clearTimeout(timer); resolve(res); } })
+            .catch(err => { if (!settled) { settled = true; clearTimeout(timer); reject(err); } });
+        } catch (e) {
+          if (!settled) { settled = true; clearTimeout(timer); reject(e); }
+        }
+      });
+    },
+
     async init() {
       if (typeof vkBridge === 'undefined') {
-        console.warn('[VK] vkBridge не найден');
+        console.warn('[VK] vkBridge не найден — работаем без VK SDK (localStorage)');
         return false;
       }
       try {
-        await vkBridge.send('VKWebAppInit');
+        await this._send('VKWebAppInit', {}, 3000);
         this.ready = true;
         console.log('[VK] Инициализирован');
-
-        // Launch params (vk_language, vk_user_id, etc.)
-        try {
-          this.launchParams = await vkBridge.send('VKWebAppGetLaunchParams');
-        } catch (e) {
-          console.warn('[VK] Не удалось получить launch params:', e);
-        }
-
-        // Инфо об игроке (для возможного отображения имени)
-        try {
-          this.user = await vkBridge.send('VKWebAppGetUserInfo');
-        } catch (e) {}
-
-        // Настроить оформление VK под игру
-        try {
-          await vkBridge.send('VKWebAppUpdateConfig', {
-            scheme: 'space_gray'
-          });
-        } catch (e) {}
-
-        // Реакция на сворачивание приложения — сохраняем прогресс
-        try {
-          vkBridge.subscribe((e) => {
-            const type = e && e.detail && e.detail.type;
-            if (type === 'VKWebAppViewHide') {
-              if (typeof gameState !== 'undefined' && gameState === 'playing') {
-                saveProgress();
-              }
-            }
-          });
-        } catch (e) {}
-
-        return true;
       } catch (e) {
-        console.error('[VK] Ошибка init:', e);
+        console.warn('[VK] VKWebAppInit не удался:', e.message, '— работаем в офлайне');
         return false;
       }
+
+      // Дальше — только если реально в ВК; всё обёрнуто в try/catch + таймауты
+      try {
+        this.launchParams = await this._send('VKWebAppGetLaunchParams', {}, 2000);
+      } catch (e) {}
+
+      try {
+        this.user = await this._send('VKWebAppGetUserInfo', {}, 2000);
+      } catch (e) {}
+
+      try {
+        await this._send('VKWebAppUpdateConfig', { scheme: 'space_gray' }, 1500);
+      } catch (e) {}
+
+      try {
+        vkBridge.subscribe((e) => {
+          const type = e && e.detail && e.detail.type;
+          if (type === 'VKWebAppViewHide') {
+            if (typeof gameState !== 'undefined' && gameState === 'playing') {
+              saveProgress();
+            }
+          }
+        });
+      } catch (e) {}
+
+      return true;
     },
 
-    // VK не имеет аналога GameplayAPI — заглушки для совместимости
     gameplayStart() {},
     gameplayStop() {},
 
-    // Межстраничная (fullscreen) реклама
     showFullscreenAd(cb) {
       if (!this.ready) { cb && cb(false); return; }
-      vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
-        .then((data) => cb && cb(!!(data && data.result)))
+      this._send('VKWebAppShowNativeAds', { ad_format: 'interstitial' }, 60000)
+        .then(data => cb && cb(!!(data && data.result)))
         .catch(() => cb && cb(false));
     },
 
-    // Реклама за вознаграждение
     showRewardedAd(onReward) {
       if (!this.ready) { onReward(false); return; }
-      vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'reward' })
-        .then((data) => onReward(!!(data && data.result)))
+      this._send('VKWebAppShowNativeAds', { ad_format: 'reward' }, 120000)
+        .then(data => onReward(!!(data && data.result)))
         .catch(() => onReward(false));
     },
 
-    // Сохранение данных (VK Storage). Значение — строка, поэтому JSON.
     async saveData(data) {
       const value = JSON.stringify(data);
       if (this.ready) {
         try {
-          await vkBridge.send('VKWebAppStorageSet', {
-            key: 'match3_save',
-            value
-          });
+          await this._send('VKWebAppStorageSet', { key: 'match3_save', value }, 3000);
           return true;
         } catch (e) {
-          console.warn('[VK] StorageSet error:', e);
+          console.warn('[VK] StorageSet error:', e.message);
         }
       }
       try { localStorage.setItem('match3_save', value); } catch (_) {}
       return false;
     },
 
-    // Загрузка данных
     async loadData() {
       if (this.ready) {
         try {
-          const res = await vkBridge.send('VKWebAppStorageGet', {
-            keys: ['match3_save']
-          });
+          const res = await this._send('VKWebAppStorageGet', { keys: ['match3_save'] }, 3000);
           const item = res && res.keys && res.keys[0];
-          if (item && item.value) {
-            return JSON.parse(item.value);
-          }
+          if (item && item.value) return JSON.parse(item.value);
         } catch (e) {
-          console.warn('[VK] StorageGet error:', e);
+          console.warn('[VK] StorageGet error:', e.message);
         }
       }
       try {
@@ -875,25 +881,21 @@
       } catch (_) { return null; }
     },
 
-    // В VK счёт не «сабмитится» — он передаётся при открытии нативного окна рекордов.
-    // Оставляем метод как no-op для совместимости.
     async submitScore(/* score */) {},
 
-    // Открытие нативного окна рекордов VK
     async showLeaderboard(score) {
       if (!this.ready) return false;
       try {
-        await vkBridge.send('VKWebAppShowLeaderBoardBox', {
+        await this._send('VKWebAppShowLeaderBoardBox', {
           user_result: Math.max(0, Math.floor(score) || 0)
-        });
+        }, 8000);
         return true;
       } catch (e) {
-        console.warn('[VK] Leaderboard error:', e);
+        console.warn('[VK] Leaderboard error:', e.message);
         return false;
       }
     },
 
-    // VK не отдаёт список записей напрямую — метод-заглушка
     async getLeaderboard() { return null; }
   };
 
@@ -2280,23 +2282,46 @@
   async function start() {
     requestAnimationFrame(gameLoop);
 
-    // 1. Сначала инициализируем VK Bridge, чтобы получить launch params
-    await VKSDK.init();
+    // Страховка: гарантированно прячем лоадер максимум через 4 секунды,
+    // что бы ни случилось с VK Bridge / сетью / CDN
+    let loadingHidden = false;
+    const hideLoadingAndShowMenu = () => {
+      if (loadingHidden) return;
+      loadingHidden = true;
+      const el = document.getElementById('loading');
+      if (el) el.classList.add('hidden');
+      setTimeout(() => showScreen('menu'), 350);
+    };
+    const safetyTimer = setTimeout(hideLoadingAndShowMenu, 4000);
 
-    // 2. Определяем язык (учитывая vk_language)
-    const lang = await detectLanguage();
-    currentLang = lang;
+    // 1. VK Bridge (не роняем start, если не получилось)
+    try {
+      await VKSDK.init();
+    } catch (e) {
+      console.warn('[start] VKSDK.init error:', e);
+    }
 
-    // 3. Загружаем прогресс из VK Storage
-    await loadProgress();
+    // 2. Язык (с учётом vk_language, если получили launch params)
+    try {
+      const lang = await detectLanguage();
+      currentLang = lang;
+    } catch (e) {
+      console.warn('[start] detectLanguage error:', e);
+      currentLang = 'ru';
+    }
+
+    // 3. Прогресс (из VK Storage или localStorage)
+    try {
+      await loadProgress();
+    } catch (e) {
+      console.warn('[start] loadProgress error:', e);
+    }
 
     applyTranslations();
 
     await sleep(1200);
-    document.getElementById('loading').classList.add('hidden');
-    setTimeout(() => {
-      showScreen('menu');
-    }, 350);
+    clearTimeout(safetyTimer);
+    hideLoadingAndShowMenu();
 
     setInterval(() => { if (gameState === 'playing') saveProgress(); }, 30000);
     window.addEventListener('beforeunload', () => { saveProgress(); });
