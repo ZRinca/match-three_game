@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Match 3 — Geometry</title>
+  <!-- VK Bridge -->
+  <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: radial-gradient(circle at 50% 0%, #2a1e4a 0%, #1a1a2e 60%, #0d0d1a 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #fff; user-select: none;
+    }
+
+    .screen {
+      position: fixed; inset: 0; display: none;
+      flex-direction: column; align-items: center; justify-content: center;
+      padding: 16px; z-index: 10;
+      opacity: 0; transform: scale(0.96);
+      transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.4,0.64,1);
+      pointer-events: none;
+    }
+    .screen.active { display: flex; opacity: 1; transform: scale(1); pointer-events: auto; }
+    .screen.leaving { display: flex; opacity: 0; transform: scale(0.9); pointer-events: none; }
+
+    /* ========== LOADING ========== */
+    #loading {
+      position: fixed; inset: 0;
+      background: radial-gradient(circle at 50% 50%, #241c44 0%, #12101f 100%);
+      display: flex; align-items: center; justify-content: center; flex-direction: column;
+      z-index: 300; transition: opacity 0.8s ease, transform 0.9s cubic-bezier(0.6,0,0.4,1);
+      overflow: hidden;
+    }
+    #loading.hidden { opacity: 0; transform: scale(1.15); pointer-events: none; }
+    .loadShapes { position: relative; width: 140px; height: 140px; margin-bottom: 32px; }
+    .loadShapes .orbit { position: absolute; inset: 0; animation: orbitRotate 3.6s linear infinite; }
+    .loadShapes .orbit:nth-child(2) { animation-duration: 4.4s; animation-direction: reverse; }
+    .loadShapes .orbit:nth-child(3) { animation-duration: 5.2s; }
+    .loadShapes .orbit:nth-child(4) { animation-duration: 3.0s; animation-direction: reverse; }
+    @keyframes orbitRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .loadShapes .shape {
+      position: absolute; width: 32px; height: 32px; border-radius: 8px;
+      left: 50%; top: 0; margin-left: -16px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35);
+      animation: shapePulse 1.8s ease-in-out infinite;
+    }
+    .loadShapes .shape.s1 { background: linear-gradient(135deg, #ff9a9a, #e74c3c); }
+    .loadShapes .shape.s2 { background: linear-gradient(135deg, #8ecdf8, #3498db); border-radius: 50%; animation-delay: 0.3s; }
+    .loadShapes .shape.s3 { background: linear-gradient(135deg, #7bf5b5, #2ecc71); clip-path: polygon(50% 0, 100% 100%, 0 100%); border-radius: 0; animation-delay: 0.6s; }
+    .loadShapes .shape.s4 { background: linear-gradient(135deg, #fff2a8, #f1c40f); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); border-radius: 0; animation-delay: 0.9s; }
+    @keyframes shapePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.25); } }
+    .loadCenter { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+    .loadCenter::before {
+      content: ''; width: 40px; height: 40px; border-radius: 50%;
+      background: radial-gradient(circle, #f1c40f 0%, transparent 70%);
+      animation: centerGlow 1.6s ease-in-out infinite;
+    }
+    @keyframes centerGlow { 0%, 100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.5); opacity: 1; } }
+    .loadText { font-size: 15px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.7; font-weight: 700; animation: loadTextPulse 2s ease-in-out infinite; }
+    @keyframes loadTextPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.9; } }
+    .loadDots { display: inline-block; width: 30px; text-align: left; }
+    .loadDots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+    /* ========== MENU ========== */
+    #menuScreen { gap: 14px; }
+    .gameTitle {
+      font-size: 52px; font-weight: 900; letter-spacing: 3px; text-align: center; line-height: 1;
+      background: linear-gradient(180deg, #ffffff 0%, #f1c40f 55%, #e67e22 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 6px 24px rgba(241,196,15,0.35)); margin-bottom: 8px;
+      display: flex; justify-content: center;
+    }
+    .gameTitle .letter { display: inline-block; opacity: 0; transform: translateY(-40px) rotate(-15deg) scale(0.4); }
+    #menuScreen.active .gameTitle .letter { animation: letterDrop 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    @keyframes letterDrop {
+      0% { opacity: 0; transform: translateY(-40px) rotate(-15deg) scale(0.4); }
+      60% { opacity: 1; transform: translateY(6px) rotate(4deg) scale(1.15); }
+      100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+    }
+    .subtitle { font-size: 13px; letter-spacing: 6px; opacity: 0; text-transform: uppercase; margin-bottom: 26px; transform: translateY(8px); }
+    #menuScreen.active .subtitle { animation: fadeUp 0.6s ease 0.6s forwards; }
+    @keyframes fadeUp { to { opacity: 0.6; transform: translateY(0); } }
+
+    .menuBest {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px; padding: 10px 22px; margin-bottom: 26px; text-align: center;
+      opacity: 0; transform: scale(0.4) translateY(10px);
+    }
+    #menuScreen.active .menuBest { animation: bestPop 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.75s forwards; }
+    @keyframes bestPop {
+      0% { opacity: 0; transform: scale(0.4) translateY(10px); }
+      60% { opacity: 1; transform: scale(1.1) translateY(0); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .menuBestLabel { font-size: 10px; letter-spacing: 1.5px; opacity: 0.6; text-transform: uppercase; font-weight: 700; }
+    .menuBestValue { font-size: 28px; font-weight: 900; color: #f1c40f; line-height: 1.15; }
+
+    .menuBtn {
+      width: 270px; padding: 16px 20px; font-size: 17px; font-weight: 800; letter-spacing: 0.5px;
+      border: none; border-radius: 14px; color: #fff; cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.25s, opacity 0.2s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 6px 20px rgba(102,126,234,0.45);
+      opacity: 0; transform: translateY(40px); position: relative; overflow: hidden;
+    }
+    #menuScreen.active .menuBtn { animation: btnSlideIn 0.6s cubic-bezier(0.34,1.4,0.64,1) forwards; }
+    #menuScreen.active .menuBtn:nth-of-type(1) { animation-delay: 0.95s; }
+    #menuScreen.active .menuBtn:nth-of-type(2) { animation-delay: 1.1s; }
+    #menuScreen.active .menuBtn:nth-of-type(3) { animation-delay: 1.25s; }
+    @keyframes btnSlideIn {
+      0% { opacity: 0; transform: translateY(40px) scale(0.9); }
+      70% { opacity: 1; transform: translateY(-4px) scale(1.02); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .menuBtn.primary { background: linear-gradient(180deg, #f7b733 0%, #fc4a1a 100%); box-shadow: 0 8px 26px rgba(252,74,26,0.5); font-size: 19px; padding: 20px; }
+    .menuBtn.primary::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.4) 45%, transparent 90%);
+      transform: translateX(-120%); animation: btnShine 3s ease-in-out infinite;
+    }
+    @keyframes btnShine { 0%, 60% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+    .menuBtn:hover { opacity: 0.95; box-shadow: 0 8px 28px rgba(102,126,234,0.6); }
+    .menuBtn.primary:hover { box-shadow: 0 10px 32px rgba(252,74,26,0.65); }
+    .menuBtn:active { transform: scale(0.95); }
+    .menuBtnIcon { font-size: 22px; }
+
+    /* ========== LANGUAGE SWITCHER ========== */
+    .langBtn {
+      position: fixed; top: 12px; right: 12px; z-index: 400;
+      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 6px 12px; color: #fff; font-size: 13px; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center; gap: 6px;
+      transition: transform 0.1s, background 0.2s;
+    }
+    .langBtn:hover { background: rgba(255,255,255,0.16); }
+    .langBtn:active { transform: scale(0.92); }
+
+    .langModal {
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center;
+    }
+    .langModal.active { display: flex; animation: fadeIn 0.25s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .langModalInner {
+      background: #1e1a35; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px; padding: 22px; width: 300px; max-width: 90vw;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      animation: modalPop 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes modalPop {
+      0% { opacity: 0; transform: scale(0.85) translateY(20px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .langModalTitle { font-size: 18px; font-weight: 800; margin-bottom: 14px; text-align: center; }
+    .langItem {
+      display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+      border-radius: 12px; cursor: pointer; font-size: 15px; font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+      border: 1px solid transparent;
+    }
+    .langItem:hover { background: rgba(255,255,255,0.08); }
+    .langItem:active { transform: scale(0.97); }
+    .langItem.current { background: rgba(102,126,234,0.25); border-color: rgba(102,126,234,0.5); }
+    .langItem .flag { font-size: 22px; }
+    .langItem .check { margin-left: auto; color: #2ecc71; font-weight: 900; opacity: 0; }
+    .langItem.current .check { opacity: 1; }
+    .langClose {
+      margin-top: 14px; width: 100%; padding: 11px;
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+      border: none; border-radius: 12px; color: #fff;
+      font-weight: 700; font-size: 14px; cursor: pointer;
+    }
+    .langClose:active { transform: scale(0.96); }
+
+    /* ========== LEVELS ========== */
+    #levelScreen { justify-content: flex-start; padding-top: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    .screenHeader { width: 100%; max-width: 520px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-shrink: 0; }
+    .backBtn {
+      width: 44px; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06); color: #fff; font-size: 20px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s, background 0.2s; flex-shrink: 0;
+    }
+    .backBtn:hover { background: rgba(255,255,255,0.12); }
+    .backBtn:active { transform: scale(0.9); }
+    .screenTitle { font-size: 26px; font-weight: 800; flex: 1; }
+    .screenSub { font-size: 12px; opacity: 0.6; font-weight: 600; }
+
+    .worldLabel {
+      width: 100%; max-width: 520px; text-align: left; font-size: 11px; letter-spacing: 1.5px;
+      text-transform: uppercase; opacity: 0.5; font-weight: 700;
+      margin: 14px 0 6px; padding-left: 6px;
+    }
+    .worldLabel:first-of-type { margin-top: 0; }
+
+    .levelsGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; max-width: 520px; padding: 0 4px; margin-bottom: 4px; }
+    .levelTile {
+      aspect-ratio: 1; border-radius: 14px;
+      background: linear-gradient(180deg, rgba(102,126,234,0.35) 0%, rgba(118,75,162,0.35) 100%);
+      border: 1px solid rgba(255,255,255,0.15);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; cursor: pointer; color: #fff; font-weight: 800;
+      transition: transform 0.12s, box-shadow 0.25s, background 0.25s;
+      position: relative; overflow: hidden;
+    }
+    #levelScreen.active .levelTile { opacity: 0; transform: scale(0.4) translateY(20px); animation: tilePop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    @keyframes tilePop {
+      0% { opacity: 0; transform: scale(0.4) translateY(20px); }
+      60% { opacity: 1; transform: scale(1.08) translateY(0); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .levelTile:hover:not(.locked) { transform: translateY(-2px) scale(1.05) !important; box-shadow: 0 8px 22px rgba(102,126,234,0.5); }
+    .levelTile:active:not(.locked) { transform: scale(0.95) !important; }
+    .levelTile.locked { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.25); cursor: not-allowed; }
+    .levelTile.completed { background: linear-gradient(180deg, rgba(46,204,113,0.35) 0%, rgba(21,122,59,0.35) 100%); border-color: rgba(46,204,113,0.5); }
+    .levelTile.current { border-color: #f1c40f; animation: tilePop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards, currentPulse 2s ease-in-out infinite 0.5s; }
+    @keyframes currentPulse {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(241,196,15,0.4), 0 0 20px rgba(241,196,15,0.35); }
+      50% { box-shadow: 0 0 0 2px rgba(241,196,15,0.7), 0 0 32px rgba(241,196,15,0.55); }
+    }
+    .levelNum { font-size: 20px; line-height: 1; }
+    .levelStars { display: flex; gap: 1px; font-size: 8px; line-height: 1; color: #f1c40f; }
+    .levelStars .empty { color: rgba(255,255,255,0.15); }
+    .levelLock { font-size: 18px; opacity: 0.5; }
+
+    /* ========== GAME ========== */
+    #gameScreen { padding: 8px; }
+    #hud { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 480px; margin-bottom: 8px; }
+    #hudTop { display: flex; justify-content: space-between; gap: 6px; }
+    .hudItem {
+      flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 5px 8px; text-align: center; transition: transform 0.15s;
+    }
+    .hudItem.pulse { animation: scorePulse 0.4s ease-out; }
+    .hudLabel { font-size: 9px; text-transform: uppercase; opacity: 0.65; letter-spacing: 0.5px; font-weight: 600; }
+    .hudValue { font-size: 18px; font-weight: 800; color: #f1c40f; line-height: 1.1; }
+    .hudMenu {
+      flex: 0 0 44px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; color: #fff; font-size: 18px; cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hudMenu:hover { background: rgba(255,255,255,0.12); }
+    .hudMenu:active { transform: scale(0.9); }
+    @keyframes scorePulse {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.12); box-shadow: 0 0 18px rgba(241,196,15,0.55); }
+      100% { transform: scale(1); }
+    }
+    #goalsPanel { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+    .goal {
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px; padding: 3px 10px 3px 6px;
+      transition: transform 0.2s, background 0.3s, border-color 0.3s;
+    }
+    .goal.done { background: rgba(46, 204, 113, 0.18); border-color: rgba(46, 204, 113, 0.5); }
+    .goal.done .goalCount { color: #2ecc71; }
+    .goal.pulse { animation: goalPulse 0.45s ease-out; }
+    @keyframes goalPulse {
+      0% { transform: scale(1); }
+      45% { transform: scale(1.15); box-shadow: 0 0 22px rgba(241,196,15,0.6); }
+      100% { transform: scale(1); }
+    }
+    .goalIcon { display: block; }
+    .goalCount { font-size: 13px; font-weight: 700; }
+
+    #controls { display: flex; gap: 8px; margin-top: 10px; }
+    #controls button {
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%); color: #fff;
+      border: none; padding: 10px 16px; border-radius: 12px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(102,126,234,0.35); transition: transform 0.1s;
+    }
+    #controls button:active { transform: scale(0.94); }
+    #controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #gameCanvas {
+      background: #0f1729; border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.05);
+      touch-action: none; max-width: 100%; max-height: calc(100vh - 280px); width: auto; height: auto;
+    }
+
+    /* ========== OVERLAYS ========== */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+      backdrop-filter: blur(6px); display: none;
+      align-items: center; justify-content: center; flex-direction: column;
+      z-index: 100; padding: 20px; text-align: center;
+    }
+    .overlay.active { display: flex; animation: overlayIn 0.35s ease-out; }
+    @keyframes overlayIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(6px); } }
+    .overlay h2 {
+      font-size: 26px; margin-bottom: 14px;
+      background: linear-gradient(180deg, #fff 0%, #f1c40f 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      transform: translateY(-20px); opacity: 0;
+    }
+    .overlay.active h2 { animation: titleDrop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.05s forwards; }
+    @keyframes titleDrop {
+      0% { transform: translateY(-30px) scale(0.8); opacity: 0; }
+      60% { transform: translateY(4px) scale(1.05); opacity: 1; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .overlay p {
+      font-size: 15px; margin-bottom: 22px; opacity: 0;
+      white-space: pre-line; line-height: 1.7;
+      max-height: 55vh; overflow-y: auto;
+      font-family: 'Courier New', monospace; transform: translateY(10px);
+    }
+    .overlay.active p { animation: fadeUp2 0.5s ease 0.15s forwards; }
+    @keyframes fadeUp2 { to { opacity: 0.92; transform: translateY(0); } }
+    .overlay button {
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+      color: #fff; border: none; padding: 14px 28px; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: transform 0.1s; box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+      min-width: 180px; opacity: 0; transform: translateY(20px);
+    }
+    .overlay.active button { animation: btnUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.25s forwards; }
+    @keyframes btnUp {
+      0% { opacity: 0; transform: translateY(20px) scale(0.9); }
+      60% { opacity: 1; transform: translateY(-3px) scale(1.03); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .overlay button:active { transform: scale(0.94); }
+
+    .winStars { display: flex; gap: 10px; margin-bottom: 18px; font-size: 46px; }
+    .winStars .star { color: rgba(255,255,255,0.15); transition: color 0.4s; transform: scale(0); }
+    .winOverlayActive .winStars .star { animation: starPop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    .winStars .star:nth-child(1) { animation-delay: 0.35s; }
+    .winStars .star:nth-child(2) { animation-delay: 0.6s; }
+    .winStars .star:nth-child(3) { animation-delay: 0.85s; }
+    .winStars .star.filled { color: #f1c40f; text-shadow: 0 0 22px rgba(241,196,15,0.7); }
+    @keyframes starPop {
+      0% { transform: scale(0) rotate(-180deg); }
+      60% { transform: scale(1.4) rotate(15deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    .winStats { display: flex; gap: 16px; margin-bottom: 24px; justify-content: center; flex-wrap: wrap; opacity: 0; }
+    .winOverlayActive .winStats { animation: fadeUp2 0.5s ease 0.4s forwards; }
+    .winStat { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 8px 16px; min-width: 100px; }
+    .winStatLabel { font-size: 10px; letter-spacing: 1px; opacity: 0.6; text-transform: uppercase; }
+    .winStatValue { font-size: 20px; font-weight: 800; color: #f1c40f; }
+    .winButtons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(20px); }
+    .winOverlayActive .winButtons { animation: btnUp 0.5s cubic-bezier(0.34,1.4,0.64,1) 0.6s forwards; }
+    .winButtons button {
+      background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+      color: #fff; border: none; padding: 14px 28px; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      transition: transform 0.1s; box-shadow: 0 4px 12px rgba(102,126,234,0.4); min-width: 140px;
+    }
+    .winButtons button#winNextBtn { background: linear-gradient(180deg, #f7b733 0%, #fc4a1a 100%); box-shadow: 0 4px 12px rgba(252,74,26,0.45); }
+    .winButtons button:active { transform: scale(0.94); }
+
+    #toast {
+      position: fixed; bottom: 30px; left: 50%;
+      transform: translateX(-50%) translateY(80px) scale(0.9);
+      background: linear-gradient(135deg, #667eea, #764ba2); color: #fff;
+      padding: 12px 22px; border-radius: 14px; font-weight: 700; font-size: 14px;
+      box-shadow: 0 8px 30px rgba(102,126,234,0.5);
+      opacity: 0;
+      transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.35s;
+      z-index: 150; pointer-events: none; white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+
+    #levelFlash {
+      position: fixed; inset: 0;
+      background: radial-gradient(circle at 50% 50%, rgba(241,196,15,0.6) 0%, transparent 70%);
+      pointer-events: none; opacity: 0; z-index: 50;
+    }
+    #levelFlash.flash { animation: levelFlash 0.7s ease-out forwards; }
+    @keyframes levelFlash { 0% { opacity: 0; } 20% { opacity: 0.9; } 100% { opacity: 0; } }
+
+    @media (max-width: 520px) {
+      .gameTitle { font-size: 40px; }
+      .menuBtn { width: 240px; }
+      .hudValue { font-size: 15px; }
+      .goalCount { font-size: 12px; }
+      .levelNum { font-size: 16px; }
+      .winStars { font-size: 36px; }
+      .loadShapes { width: 110px; height: 110px; }
+      .loadShapes .shape { width: 26px; height: 26px; margin-left: -13px; }
+    }
+    @media (max-height: 640px) {
+      .gameTitle { font-size: 32px; }
+      .subtitle { margin-bottom: 14px; }
+      .menuBest { margin-bottom: 14px; padding: 6px 16px; }
+      .menuBestValue { font-size: 20px; }
+      .menuBtn.primary { padding: 14px; font-size: 16px; }
+      .menuBtn { padding: 12px 16px; font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loading">
+    <div class="loadShapes">
+      <div class="orbit"><div class="shape s1"></div></div>
+      <div class="orbit"><div class="shape s2"></div></div>
+      <div class="orbit"><div class="shape s3"></div></div>
+      <div class="orbit"><div class="shape s4"></div></div>
+      <div class="loadCenter"></div>
+    </div>
+    <div class="loadText"><span id="loadingText">Загрузка</span><span class="loadDots"></span></div>
+  </div>
+
+  <div id="levelFlash"></div>
+
+  <button class="langBtn" id="langBtn">
+    <span id="langBtnFlag">🇷🇺</span>
+    <span id="langBtnCode">RU</span>
+  </button>
+
+  <div class="langModal" id="langModal">
+    <div class="langModalInner">
+      <div class="langModalTitle" id="langModalTitle">Язык</div>
+      <div id="langList"></div>
+      <button class="langClose" id="langCloseBtn">Закрыть</button>
+    </div>
+  </div>
+
+  <div id="menuScreen" class="screen active">
+    <div class="gameTitle" id="gameTitleEl"></div>
+    <div class="subtitle" id="subtitleEl">ГЕОМЕТРИЯ</div>
+
+    <div class="menuBest">
+      <div class="menuBestLabel" id="menuBestLabel">🏆 Рекорд</div>
+      <div class="menuBestValue" id="menuBestScore">0</div>
+    </div>
+
+    <button class="menuBtn primary" id="playBtn">
+      <span class="menuBtnIcon">▶</span>
+      <span id="playBtnText">ИГРАТЬ</span>
+    </button>
+    <button class="menuBtn" id="levelsBtn">
+      <span class="menuBtnIcon">🎯</span>
+      <span id="levelsBtnText">УРОВНИ</span>
+    </button>
+    <button class="menuBtn" id="recordsBtn">
+      <span class="menuBtnIcon">🏆</span>
+      <span id="recordsBtnText">РЕКОРДЫ</span>
+    </button>
+  </div>
+
+  <div id="levelScreen" class="screen">
+    <div class="screenHeader">
+      <button class="backBtn" id="levelsBackBtn">←</button>
+      <div class="screenTitle" id="levelsTitle">Уровни</div>
+      <div class="screenSub" id="levelsCounter">0/30</div>
+    </div>
+    <div id="levelsContainer"></div>
+  </div>
+
+  <div id="gameScreen" class="screen">
+    <div id="hud">
+      <div id="hudTop">
+        <button class="hudMenu" id="gameMenuBtn">☰</button>
+        <div class="hudItem" id="levelBox">
+          <div class="hudLabel" id="hudLevelLabel">Уровень</div>
+          <div class="hudValue" id="levelValue">1</div>
+        </div>
+        <div class="hudItem" id="movesBox">
+          <div class="hudLabel" id="hudMovesLabel">Ходы</div>
+          <div class="hudValue" id="movesValue">25</div>
+        </div>
+        <div class="hudItem" id="scoreBox">
+          <div class="hudLabel" id="hudScoreLabel">Очки</div>
+          <div class="hudValue" id="scoreValue">0</div>
+        </div>
+      </div>
+      <div id="goalsPanel"></div>
+    </div>
+    <canvas id="gameCanvas" width="480" height="480"></canvas>
+    <div id="controls">
+      <button id="hintBtn">💡 <span id="hintBtnText">Подсказка</span></button>
+    </div>
+  </div>
+
+  <div id="overlay" class="overlay">
+    <h2 id="overlayTitle">Заголовок</h2>
+    <p id="overlayText">Текст</p>
+    <button id="overlayBtn">OK</button>
+  </div>
+
+  <div id="winOverlay" class="overlay">
+    <h2 id="winTitle">Уровень пройден!</h2>
+    <div class="winStars" id="winStars">
+      <span class="star" data-i="0">★</span>
+      <span class="star" data-i="1">★</span>
+      <span class="star" data-i="2">★</span>
+    </div>
+    <div class="winStats">
+      <div class="winStat">
+        <div class="winStatLabel" id="winScoreLabel">Очки</div>
+        <div class="winStatValue" id="winScore">0</div>
+      </div>
+      <div class="winStat">
+        <div class="winStatLabel" id="winMovesLabel">Ходы</div>
+        <div class="winStatValue" id="winMoves">0/25</div>
+      </div>
+    </div>
+    <div class="winButtons">
+      <button id="winMenuBtn">В меню</button>
+      <button id="winNextBtn">Далее</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+  'use strict';
+
+  /* ============================================================
+   *  ЛОКАЛИЗАЦИЯ — 3 ЯЗЫКА
+   * ============================================================ */
+  const TRANSLATIONS = {
+    ru: {
+      _flag: '🇷🇺', _name: 'Русский',
+      loading: 'Загрузка',
+      subtitle: 'ГЕОМЕТРИЯ',
+      bestScore: '🏆 Рекорд',
+      play: 'ИГРАТЬ',
+      continue: 'ПРОДОЛЖИТЬ',
+      playAgain: 'ИГРАТЬ СНОВА',
+      levels: 'УРОВНИ',
+      records: 'РЕКОРДЫ',
+      level: 'Уровень',
+      moves: 'Ходы',
+      score: 'Очки',
+      hint: 'Подсказка',
+      world1: 'Мир 1 · Знакомство',
+      world2: 'Мир 2 · Новые фигуры',
+      world3: 'Мир 3 · Двойные цели',
+      world4: 'Мир 4 · Мастерство',
+      world5: 'Мир 5 · Испытание',
+      levelComplete: 'Уровень пройден!',
+      allComplete: '🏆 Все уровни пройдены!',
+      nextLevel: 'Далее',
+      toMenu: 'В меню',
+      pause: 'Пауза',
+      retry: 'Попробовать снова',
+      outOfMoves: '😔 Не получилось',
+      outOfMovesText: 'Ходы закончились!',
+      progress: 'Прогресс',
+      unlocked: '🎉 Открыт уровень {n}!',
+      locked: '🔒 Уровень заблокирован',
+      leaderboard: '🏆 Рекорды',
+      leaderboardUnavailable: 'Таблица рекордов доступна только внутри ВКонтакте.',
+      noResults: 'Пока нет результатов.\nСыграйте партию!',
+      yourBest: 'Ваш рекорд',
+      close: 'Закрыть',
+      ok: 'OK',
+      language: 'Язык',
+      shapeNames: {
+        circle:   { one: 'круга',          many: 'кругов' },
+        square:   { one: 'квадрата',       many: 'квадратов' },
+        triangle: { one: 'треугольника',   many: 'треугольников' },
+        diamond:  { one: 'ромба',          many: 'ромбов' },
+        pentagon: { one: 'пятиугольника',  many: 'пятиугольников' },
+        hexagon:  { one: 'шестиугольника', many: 'шестиугольников' },
+        star:     { one: 'звезды',         many: 'звёзд' }
+      }
+    },
+    en: {
+      _flag: '🇬🇧', _name: 'English',
+      loading: 'Loading',
+      subtitle: 'GEOMETRY',
+      bestScore: '🏆 Best',
+      play: 'PLAY',
+      continue: 'CONTINUE',
+      playAgain: 'PLAY AGAIN',
+      levels: 'LEVELS',
+      records: 'RECORDS',
+      level: 'Level',
+      moves: 'Moves',
+      score: 'Score',
+      hint: 'Hint',
+      world1: 'World 1 · Introduction',
+      world2: 'World 2 · New Shapes',
+      world3: 'World 3 · Double Goals',
+      world4: 'World 4 · Mastery',
+      world5: 'World 5 · Trial',
+      levelComplete: 'Level Complete!',
+      allComplete: '🏆 All Levels Complete!',
+      nextLevel: 'Next',
+      toMenu: 'Menu',
+      pause: 'Pause',
+      retry: 'Try Again',
+      outOfMoves: '😔 Out of moves',
+      outOfMovesText: 'No moves left!',
+      progress: 'Progress',
+      unlocked: '🎉 Level {n} unlocked!',
+      locked: '🔒 Level locked',
+      leaderboard: '🏆 Leaderboard',
+      leaderboardUnavailable: 'Leaderboard is available only inside VK.',
+      noResults: 'No results yet.\nPlay a game!',
+      yourBest: 'Your best',
+      close: 'Close',
+      ok: 'OK',
+      language: 'Language',
+      shapeNames: {
+        circle:   { one: 'circle',    many: 'circles' },
+        square:   { one: 'square',    many: 'squares' },
+        triangle: { one: 'triangle',  many: 'triangles' },
+        diamond:  { one: 'diamond',   many: 'diamonds' },
+        pentagon: { one: 'pentagon',  many: 'pentagons' },
+        hexagon:  { one: 'hexagon',   many: 'hexagons' },
+        star:     { one: 'star',      many: 'stars' }
+      }
+    },
+    tr: {
+      _flag: '🇹🇷', _name: 'Türkçe',
+      loading: 'Yükleniyor',
+      subtitle: 'GEOMETRİ',
+      bestScore: '🏆 Rekor',
+      play: 'OYNA',
+      continue: 'DEVAM ET',
+      playAgain: 'TEKRAR OYNA',
+      levels: 'BÖLÜMLER',
+      records: 'REKORLAR',
+      level: 'Bölüm',
+      moves: 'Hamle',
+      score: 'Puan',
+      hint: 'İpucu',
+      world1: 'Dünya 1 · Tanışma',
+      world2: 'Dünya 2 · Yeni Şekiller',
+      world3: 'Dünya 3 · Çift Hedef',
+      world4: 'Dünya 4 · Ustalık',
+      world5: 'Dünya 5 · Sınav',
+      levelComplete: 'Bölüm Tamamlandı!',
+      allComplete: '🏆 Tüm Bölümler Tamam!',
+      nextLevel: 'Sonraki',
+      toMenu: 'Menü',
+      pause: 'Duraklat',
+      retry: 'Tekrar Dene',
+      outOfMoves: '😔 Hamle bitti',
+      outOfMovesText: 'Hamle kalmadı!',
+      progress: 'İlerleme',
+      unlocked: '🎉 Bölüm {n} açıldı!',
+      locked: '🔒 Bölüm kilitli',
+      leaderboard: '🏆 Rekorlar',
+      leaderboardUnavailable: 'Liderlik tablosu yalnızca VK içinde kullanılabilir.',
+      noResults: 'Henüz sonuç yok.\nBir oyun oynayın!',
+      yourBest: 'En iyiniz',
+      close: 'Kapat',
+      ok: 'Tamam',
+      language: 'Dil',
+      shapeNames: {
+        circle:   { one: 'daire',   many: 'daire' },
+        square:   { one: 'kare',    many: 'kare' },
+        triangle: { one: 'üçgen',   many: 'üçgen' },
+        diamond:  { one: 'elmas',   many: 'elmas' },
+        pentagon: { one: 'beşgen',  many: 'beşgen' },
+        hexagon:  { one: 'altıgen', many: 'altıgen' },
+        star:     { one: 'yıldız',  many: 'yıldız' }
+      }
+    }
+  };
+
+  const AVAILABLE_LANGS = [
+    { code: 'ru', flag: '🇷🇺', name: 'Русский' },
+    { code: 'en', flag: '🇬🇧', name: 'English' },
+    { code: 'tr', flag: '🇹🇷', name: 'Türkçe' }
+  ];
+
+  let currentLang = 'ru';
+
+  function t(key, params = {}) {
+    const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.ru;
+    let text = dict[key] !== undefined ? dict[key] : (TRANSLATIONS.ru[key] || key);
+    for (const k in params) {
+      text = text.replace(new RegExp('\\{' + k + '\\}', 'g'), params[k]);
+    }
+    return text;
+  }
+
+  function shapeName(shape, count) {
+    const dict = TRANSLATIONS[currentLang] || TRANSLATIONS.ru;
+    const names = dict.shapeNames && dict.shapeNames[shape];
+    if (!names) return shape;
+    if (currentLang === 'ru') {
+      const n = count % 100;
+      if (n >= 11 && n <= 19) return names.many;
+      const d = count % 10;
+      if (d === 1) return names.one;
+      if (d >= 2 && d <= 4) return names.one;
+      return names.many;
+    }
+    return count === 1 ? names.one : names.many;
+  }
+
+  function applyTranslations() {
+    document.getElementById('loadingText').textContent = t('loading');
+    document.getElementById('subtitleEl').textContent = t('subtitle');
+    document.getElementById('menuBestLabel').textContent = t('bestScore');
+    document.getElementById('playBtnText').textContent = t('play');
+    document.getElementById('levelsBtnText').textContent = t('levels');
+    document.getElementById('recordsBtnText').textContent = t('records');
+    document.getElementById('levelsTitle').textContent = t('levels');
+    document.getElementById('hudLevelLabel').textContent = t('level');
+    document.getElementById('hudMovesLabel').textContent = t('moves');
+    document.getElementById('hudScoreLabel').textContent = t('score');
+    document.getElementById('hintBtnText').textContent = t('hint');
+    document.getElementById('winScoreLabel').textContent = t('score');
+    document.getElementById('winMovesLabel').textContent = t('moves');
+    document.getElementById('langModalTitle').textContent = t('language');
+    document.getElementById('langCloseBtn').textContent = t('close');
+
+    const lang = AVAILABLE_LANGS.find(l => l.code === currentLang);
+    if (lang) {
+      document.getElementById('langBtnFlag').textContent = lang.flag;
+      document.getElementById('langBtnCode').textContent = lang.code.toUpperCase();
+    }
+
+    buildTitleLetters(currentLang === 'ru' ? 'ТРИ В РЯД' : 'MATCH 3');
+
+    updateMenuUI();
+
+    if (levelScreen.classList.contains('active')) renderLevelsGrid();
+  }
+
+  function setLanguage(code) {
+    if (!TRANSLATIONS[code]) code = 'en';
+    currentLang = code;
+    applyTranslations();
+    try { localStorage.setItem('match3_lang', code); } catch (e) {}
+  }
+
+  async function detectLanguage() {
+    // 1. Сохранённый выбор игрока
+    try {
+      const saved = localStorage.getItem('match3_lang');
+      if (saved && TRANSLATIONS[saved]) return saved;
+    } catch (e) {}
+
+    // 2. Язык из launch params VK (vk_language)
+    try {
+      const lp = VKSDK.launchParams;
+      const lang = lp && lp.vk_language;
+      if (lang) {
+        if (TRANSLATIONS[lang]) return lang;
+        if (['be', 'kk', 'uk', 'uz'].includes(lang)) return 'ru';
+      }
+    } catch (e) {
+      console.warn('[i18n] Не удалось определить язык через VK:', e);
+    }
+
+    // 3. Язык браузера
+    const browserLang = (navigator.language || 'en').split('-')[0];
+    if (TRANSLATIONS[browserLang]) return browserLang;
+    if (['be', 'kk', 'uk', 'uz'].includes(browserLang)) return 'ru';
+    return 'en';
+  }
+
+  /* ============================================================
+   *  VK BRIDGE WRAPPER
+   * ============================================================ */
+  const VKSDK = {
+    ready: false,
+    launchParams: null,
+    user: null,
+
+    async init() {
+      if (typeof vkBridge === 'undefined') {
+        console.warn('[VK] vkBridge не найден');
+        return false;
+      }
+      try {
+        await vkBridge.send('VKWebAppInit');
+        this.ready = true;
+        console.log('[VK] Инициализирован');
+
+        // Launch params (vk_language, vk_user_id, etc.)
+        try {
+          this.launchParams = await vkBridge.send('VKWebAppGetLaunchParams');
+        } catch (e) {
+          console.warn('[VK] Не удалось получить launch params:', e);
+        }
+
+        // Инфо об игроке (для возможного отображения имени)
+        try {
+          this.user = await vkBridge.send('VKWebAppGetUserInfo');
+        } catch (e) {}
+
+        // Настроить оформление VK под игру
+        try {
+          await vkBridge.send('VKWebAppUpdateConfig', {
+            scheme: 'space_gray'
+          });
+        } catch (e) {}
+
+        // Реакция на сворачивание приложения — сохраняем прогресс
+        try {
+          vkBridge.subscribe((e) => {
+            const type = e && e.detail && e.detail.type;
+            if (type === 'VKWebAppViewHide') {
+              if (typeof gameState !== 'undefined' && gameState === 'playing') {
+                saveProgress();
+              }
+            }
+          });
+        } catch (e) {}
+
+        return true;
+      } catch (e) {
+        console.error('[VK] Ошибка init:', e);
+        return false;
+      }
+    },
+
+    // VK не имеет аналога GameplayAPI — заглушки для совместимости
+    gameplayStart() {},
+    gameplayStop() {},
+
+    // Межстраничная (fullscreen) реклама
+    showFullscreenAd(cb) {
+      if (!this.ready) { cb && cb(false); return; }
+      vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'interstitial' })
+        .then((data) => cb && cb(!!(data && data.result)))
+        .catch(() => cb && cb(false));
+    },
+
+    // Реклама за вознаграждение
+    showRewardedAd(onReward) {
+      if (!this.ready) { onReward(false); return; }
+      vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'reward' })
+        .then((data) => onReward(!!(data && data.result)))
+        .catch(() => onReward(false));
+    },
+
+    // Сохранение данных (VK Storage). Значение — строка, поэтому JSON.
+    async saveData(data) {
+      const value = JSON.stringify(data);
+      if (this.ready) {
+        try {
+          await vkBridge.send('VKWebAppStorageSet', {
+            key: 'match3_save',
+            value
+          });
+          return true;
+        } catch (e) {
+          console.warn('[VK] StorageSet error:', e);
+        }
+      }
+      try { localStorage.setItem('match3_save', value); } catch (_) {}
+      return false;
+    },
+
+    // Загрузка данных
+    async loadData() {
+      if (this.ready) {
+        try {
+          const res = await vkBridge.send('VKWebAppStorageGet', {
+            keys: ['match3_save']
+          });
+          const item = res && res.keys && res.keys[0];
+          if (item && item.value) {
+            return JSON.parse(item.value);
+          }
+        } catch (e) {
+          console.warn('[VK] StorageGet error:', e);
+        }
+      }
+      try {
+        const saved = localStorage.getItem('match3_save');
+        return saved ? JSON.parse(saved) : null;
+      } catch (_) { return null; }
+    },
+
+    // В VK счёт не «сабмитится» — он передаётся при открытии нативного окна рекордов.
+    // Оставляем метод как no-op для совместимости.
+    async submitScore(/* score */) {},
+
+    // Открытие нативного окна рекордов VK
+    async showLeaderboard(score) {
+      if (!this.ready) return false;
+      try {
+        await vkBridge.send('VKWebAppShowLeaderBoardBox', {
+          user_result: Math.max(0, Math.floor(score) || 0)
+        });
+        return true;
+      } catch (e) {
+        console.warn('[VK] Leaderboard error:', e);
+        return false;
+      }
+    },
+
+    // VK не отдаёт список записей напрямую — метод-заглушка
+    async getLeaderboard() { return null; }
+  };
+
+  /* ============================================================
+   *  ПРОГРЕСС
+   * ============================================================ */
+  const progress = {
+    unlockedLevel: 1,
+    currentLevel: 1,
+    levelStars: {},
+    levelScores: {},
+    bestScore: 0,
+    totalScore: 0
+  };
+
+  /* ============================================================
+   *  ФИГУРЫ
+   * ============================================================ */
+  const SHAPE_INFO = {
+    circle:   { color: '#e74c3c', light: '#ff9a9a', dark: '#9b1c1c' },
+    square:   { color: '#3498db', light: '#8ecdf8', dark: '#155284' },
+    triangle: { color: '#2ecc71', light: '#7bf5b5', dark: '#157a3b' },
+    diamond:  { color: '#f1c40f', light: '#fff2a8', dark: '#a8850a' },
+    pentagon: { color: '#9b59b6', light: '#c9a7f5', dark: '#59247a' },
+    hexagon:  { color: '#e67e22', light: '#ffc39c', dark: '#9c3f0d' },
+    star:     { color: '#1abc9c', light: '#7ef0da', dark: '#0e7d68' }
+  };
+
+  /* ============================================================
+   *  30 УРОВНЕЙ — 5 МИРОВ
+   * ============================================================ */
+  const WORLDS = [
+    { nameKey: 'world1', from: 1,  to: 6  },
+    { nameKey: 'world2', from: 7,  to: 12 },
+    { nameKey: 'world3', from: 13, to: 18 },
+    { nameKey: 'world4', from: 19, to: 24 },
+    { nameKey: 'world5', from: 25, to: 30 }
+  ];
+
+  const LEVELS = [
+    { moves: 25, shapes: ['circle','square','triangle'], goals: [{ shape: 'circle', count: 10 }] },
+    { moves: 25, shapes: ['circle','square','triangle'], goals: [{ shape: 'square', count: 12 }] },
+    { moves: 26, shapes: ['circle','square','triangle'], goals: [{ shape: 'triangle', count: 12 }] },
+    { moves: 28, shapes: ['circle','square','triangle','diamond'], goals: [{ shape: 'diamond', count: 12 }] },
+    { moves: 30, shapes: ['circle','square','triangle','diamond'], goals: [{ shape: 'circle', count: 10 }, { shape: 'square', count: 10 }] },
+    { moves: 30, shapes: ['circle','square','triangle','diamond'], goals: [{ shape: 'triangle', count: 12 }, { shape: 'diamond', count: 10 }] },
+    { moves: 30, shapes: ['circle','square','triangle','diamond','pentagon'], goals: [{ shape: 'pentagon', count: 15 }] },
+    { moves: 32, shapes: ['circle','square','triangle','diamond','pentagon'], goals: [{ shape: 'circle', count: 15 }] },
+    { moves: 32, shapes: ['circle','square','triangle','pentagon','hexagon'], goals: [{ shape: 'hexagon', count: 15 }] },
+    { moves: 32, shapes: ['circle','square','triangle','pentagon','hexagon'], goals: [{ shape: 'pentagon', count: 12 }, { shape: 'hexagon', count: 12 }] },
+    { moves: 34, shapes: ['square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 15 }] },
+    { moves: 34, shapes: ['square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'square', count: 15 }] },
+    { moves: 36, shapes: ['circle','triangle','diamond','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'triangle', count: 12 }] },
+    { moves: 36, shapes: ['circle','square','triangle','diamond','pentagon'], goals: [{ shape: 'circle', count: 15 }, { shape: 'square', count: 15 }] },
+    { moves: 38, shapes: ['circle','square','triangle','pentagon','hexagon'], goals: [{ shape: 'triangle', count: 15 }, { shape: 'hexagon', count: 15 }] },
+    { moves: 40, shapes: ['circle','square','diamond','pentagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'pentagon', count: 12 }] },
+    { moves: 40, shapes: ['circle','square','triangle','diamond','pentagon','hexagon'], goals: [{ shape: 'triangle', count: 12 }, { shape: 'hexagon', count: 12 }] },
+    { moves: 42, shapes: ['circle','square','triangle','diamond','pentagon','hexagon'], goals: [{ shape: 'circle', count: 15 }, { shape: 'diamond', count: 15 }] },
+    { moves: 42, shapes: ['circle','triangle','diamond','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'hexagon', count: 12 }] },
+    { moves: 44, shapes: ['circle','square','triangle','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 10 }, { shape: 'circle', count: 10 }, { shape: 'pentagon', count: 10 }] },
+    { moves: 44, shapes: ['circle','square','triangle','diamond','hexagon','star'], goals: [{ shape: 'diamond', count: 12 }, { shape: 'hexagon', count: 12 }] },
+    { moves: 46, shapes: ['square','triangle','diamond','pentagon','hexagon','star'], goals: [{ shape: 'triangle', count: 12 }, { shape: 'star', count: 12 }] },
+    { moves: 46, shapes: ['circle','square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'square', count: 12 }, { shape: 'pentagon', count: 12 }] },
+    { moves: 48, shapes: ['circle','triangle','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'triangle', count: 12 }, { shape: 'pentagon', count: 12 }] },
+    { moves: 48, shapes: ['circle','square','triangle','pentagon','hexagon','star'], goals: [{ shape: 'circle', count: 15 }, { shape: 'hexagon', count: 15 }] },
+    { moves: 50, shapes: ['circle','square','triangle','diamond','pentagon','hexagon'], goals: [{ shape: 'circle', count: 15 }, { shape: 'diamond', count: 15 }, { shape: 'square', count: 15 }] },
+    { moves: 50, shapes: ['circle','square','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 15 }, { shape: 'pentagon', count: 15 }] },
+    { moves: 52, shapes: ['circle','square','triangle','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 12 }, { shape: 'hexagon', count: 12 }, { shape: 'pentagon', count: 12 }] },
+    { moves: 55, shapes: ['circle','square','triangle','diamond','hexagon','star'], goals: [{ shape: 'star', count: 15 }, { shape: 'diamond', count: 15 }, { shape: 'hexagon', count: 15 }] },
+    { moves: 60, shapes: ['circle','square','triangle','diamond','pentagon','hexagon','star'], goals: [{ shape: 'star', count: 15 }, { shape: 'pentagon', count: 15 }, { shape: 'hexagon', count: 15 }] }
+  ];
+
+  /* ============================================================
+   *  КОНСТАНТЫ
+   * ============================================================ */
+  const ROWS = 8;
+  const COLS = 8;
+  const TILE_SIZE = 60;
+  const BOARD_PAD = 5;
+
+  /* ============================================================
+   *  EASING
+   * ============================================================ */
+  const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  const easeInQuad = t => t * t;
+  const easeOutBack = t => {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  };
+  const easeOutElastic = t => {
+    const c4 = (2 * Math.PI) / 3;
+    return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+  };
+  const easeOutBounce = t => {
+    const n1 = 7.5625, d1 = 2.75;
+    if (t < 1 / d1) return n1 * t * t;
+    if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+    if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+    return n1 * (t -= 2.625 / d1) * t + 0.984375;
+  };
+
+  /* ============================================================
+   *  STATE
+   * ============================================================ */
+  let board = [];
+  let score = 0;
+  let currentLevel = 1;
+  let currentLevelData = LEVELS[0];
+  let movesLeft = 25;
+  let goalsProgress = {};
+  let busy = false;
+  let selectedTile = null;
+  let gameState = 'menu';
+
+  const animations = [];
+  const particles = [];
+  const floatingTexts = [];
+  let shakeAmount = 0;
+
+  /* ============================================================
+   *  DOM
+   * ============================================================ */
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  const menuScreen = document.getElementById('menuScreen');
+  const levelScreen = document.getElementById('levelScreen');
+  const gameScreen = document.getElementById('gameScreen');
+
+  const playBtn = document.getElementById('playBtn');
+  const playBtnText = document.getElementById('playBtnText');
+  const levelsBtn = document.getElementById('levelsBtn');
+  const recordsBtn = document.getElementById('recordsBtn');
+  const menuBestScoreEl = document.getElementById('menuBestScore');
+  const gameTitleEl = document.getElementById('gameTitleEl');
+
+  const levelsContainer = document.getElementById('levelsContainer');
+  const levelsCounter = document.getElementById('levelsCounter');
+  const levelsBackBtn = document.getElementById('levelsBackBtn');
+
+  const levelValueEl = document.getElementById('levelValue');
+  const movesValueEl = document.getElementById('movesValue');
+  const scoreValueEl = document.getElementById('scoreValue');
+  const levelBox = document.getElementById('levelBox');
+  const movesBox = document.getElementById('movesBox');
+  const scoreBox = document.getElementById('scoreBox');
+  const goalsPanel = document.getElementById('goalsPanel');
+  const gameMenuBtn = document.getElementById('gameMenuBtn');
+  const hintBtn = document.getElementById('hintBtn');
+
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayText = document.getElementById('overlayText');
+  const overlayBtn = document.getElementById('overlayBtn');
+
+  const winOverlay = document.getElementById('winOverlay');
+  const winTitle = document.getElementById('winTitle');
+  const winStars = document.getElementById('winStars');
+  const winScore = document.getElementById('winScore');
+  const winMoves = document.getElementById('winMoves');
+  const winMenuBtn = document.getElementById('winMenuBtn');
+  const winNextBtn = document.getElementById('winNextBtn');
+
+  const toast = document.getElementById('toast');
+  const levelFlash = document.getElementById('levelFlash');
+
+  const langBtn = document.getElementById('langBtn');
+  const langModal = document.getElementById('langModal');
+  const langList = document.getElementById('langList');
+  const langCloseBtn = document.getElementById('langCloseBtn');
+
+  /* ============================================================
+   *  TITLE LETTERS
+   * ============================================================ */
+  function buildTitleLetters(text) {
+    gameTitleEl.innerHTML = '';
+    [...text].forEach((ch, i) => {
+      const span = document.createElement('span');
+      span.className = 'letter';
+      span.textContent = ch === ' ' ? '\u00A0' : ch;
+      span.style.animationDelay = (i * 0.06) + 's';
+      gameTitleEl.appendChild(span);
+    });
+  }
+
+  function replayTitleAnimation() {
+    const letters = gameTitleEl.querySelectorAll('.letter');
+    letters.forEach((el, i) => {
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = `letterDrop 0.7s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.06}s forwards`;
+    });
+  }
+
+  /* ============================================================
+   *  LANGUAGE SWITCHER
+   * ============================================================ */
+  function openLangModal() {
+    langList.innerHTML = '';
+    AVAILABLE_LANGS.forEach(lang => {
+      const item = document.createElement('div');
+      item.className = 'langItem' + (lang.code === currentLang ? ' current' : '');
+
+      const flag = document.createElement('span');
+      flag.className = 'flag';
+      flag.textContent = lang.flag;
+
+      const name = document.createElement('span');
+      name.textContent = lang.name;
+
+      const check = document.createElement('span');
+      check.className = 'check';
+      check.textContent = '✓';
+
+      item.appendChild(flag);
+      item.appendChild(name);
+      item.appendChild(check);
+
+      item.addEventListener('click', () => {
+        setLanguage(lang.code);
+        langModal.classList.remove('active');
+      });
+
+      langList.appendChild(item);
+    });
+    langModal.classList.add('active');
+  }
+
+  langBtn.addEventListener('click', openLangModal);
+  langCloseBtn.addEventListener('click', () => langModal.classList.remove('active'));
+  langModal.addEventListener('click', (e) => {
+    if (e.target === langModal) langModal.classList.remove('active');
+  });
+
+  /* ============================================================
+   *  SCREENS
+   * ============================================================ */
+  function showScreen(name) {
+    [menuScreen, levelScreen, gameScreen].forEach(s => {
+      if (s.classList.contains('active')) {
+        s.classList.remove('active');
+        s.classList.add('leaving');
+        setTimeout(() => s.classList.remove('leaving'), 400);
+      } else {
+        s.classList.remove('active');
+      }
+    });
+
+    setTimeout(() => {
+      if (name === 'menu') {
+        replayTitleAnimation();
+        const buttons = menuScreen.querySelectorAll('.menuBtn');
+        buttons.forEach((b, i) => {
+          b.style.animation = 'none';
+          void b.offsetWidth;
+          b.style.animation = `btnSlideIn 0.6s cubic-bezier(0.34,1.4,0.64,1) ${0.95 + i * 0.15}s forwards`;
+        });
+        const best = menuScreen.querySelector('.menuBest');
+        best.style.animation = 'none';
+        void best.offsetWidth;
+        best.style.animation = 'bestPop 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.75s forwards';
+        const sub = menuScreen.querySelector('.subtitle');
+        sub.style.animation = 'none';
+        void sub.offsetWidth;
+        sub.style.animation = 'fadeUp 0.6s ease 0.6s forwards';
+
+        menuScreen.classList.add('active');
+        updateMenuUI();
+      } else if (name === 'levels') {
+        levelScreen.classList.add('active');
+        renderLevelsGrid();
+      } else if (name === 'game') {
+        gameScreen.classList.add('active');
+      }
+    }, 200);
+  }
+
+  function updateMenuUI() {
+    menuBestScoreEl.textContent = progress.bestScore;
+    const next = progress.unlockedLevel;
+    if (next === 1 && Object.keys(progress.levelStars).length === 0) {
+      playBtnText.textContent = t('play');
+    } else if (next > LEVELS.length) {
+      playBtnText.textContent = t('playAgain');
+    } else {
+      playBtnText.textContent = `${t('continue')} · ${t('level')} ${next}`;
+    }
+  }
+
+  function showToast(msg, duration = 2000) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('show'), duration);
+  }
+
+  function flashLevel() {
+    levelFlash.classList.remove('flash');
+    void levelFlash.offsetWidth;
+    levelFlash.classList.add('flash');
+  }
+
+  /* ============================================================
+   *  LEVELS GRID
+   * ============================================================ */
+  function renderLevelsGrid() {
+    levelsContainer.innerHTML = '';
+    const completed = Object.keys(progress.levelStars).length;
+    levelsCounter.textContent = `${completed}/${LEVELS.length}`;
+
+    let tileIndex = 0;
+
+    WORLDS.forEach(world => {
+      const label = document.createElement('div');
+      label.className = 'worldLabel';
+      label.textContent = t(world.nameKey);
+      levelsContainer.appendChild(label);
+
+      const grid = document.createElement('div');
+      grid.className = 'levelsGrid';
+
+      for (let i = world.from; i <= world.to; i++) {
+        const unlocked = i <= progress.unlockedLevel;
+        const stars = progress.levelStars[i] || 0;
+        const isCompleted = stars > 0;
+        const isCurrent = i === progress.unlockedLevel && !isCompleted;
+
+        const tile = document.createElement('button');
+        tile.className = 'levelTile';
+        if (!unlocked) tile.classList.add('locked');
+        if (isCompleted) tile.classList.add('completed');
+        if (isCurrent) tile.classList.add('current');
+
+        tile.style.animationDelay = (tileIndex * 0.035) + 's';
+        tileIndex++;
+
+        if (unlocked) {
+          const num = document.createElement('div');
+          num.className = 'levelNum';
+          num.textContent = i;
+          tile.appendChild(num);
+
+          if (isCompleted) {
+            const starsEl = document.createElement('div');
+            starsEl.className = 'levelStars';
+            for (let s = 1; s <= 3; s++) {
+              const star = document.createElement('span');
+              star.textContent = '★';
+              if (s > stars) star.className = 'empty';
+              starsEl.appendChild(star);
+            }
+            tile.appendChild(starsEl);
+          }
+
+          tile.addEventListener('click', () => startLevel(i));
+        } else {
+          const lock = document.createElement('div');
+          lock.className = 'levelLock';
+          lock.textContent = '🔒';
+          tile.appendChild(lock);
+        }
+
+        grid.appendChild(tile);
+      }
+
+      levelsContainer.appendChild(grid);
+    });
+  }
+
+  /* ============================================================
+   *  TWEEN
+   * ============================================================ */
+  function tween(target, props, duration, easingFn = easeOutCubic, delay = 0) {
+    return new Promise(resolve => {
+      const start = {};
+      for (const k in props) start[k] = target[k];
+      animations.push({ target, start, end: props, duration, easing: easingFn, elapsed: -delay, resolve });
+    });
+  }
+
+  function updateAnimations(dt) {
+    for (let i = animations.length - 1; i >= 0; i--) {
+      const a = animations[i];
+      a.elapsed += dt;
+      if (a.elapsed < 0) continue;
+      const t = Math.min(1, a.elapsed / a.duration);
+      const e = a.easing(t);
+      for (const k in a.end) a.target[k] = a.start[k] + (a.end[k] - a.start[k]) * e;
+      if (t >= 1) { animations.splice(i, 1); a.resolve(); }
+    }
+  }
+
+  /* ============================================================
+   *  SHAPES
+   * ============================================================ */
+  function shapePath(c, shape, cx, cy, size) {
+    const r = size / 2;
+    c.beginPath();
+    switch (shape) {
+      case 'circle': c.arc(cx, cy, r * 0.94, 0, Math.PI * 2); break;
+      case 'square': roundRect(c, cx - r * 0.86, cy - r * 0.86, r * 1.72, r * 1.72, r * 0.24); break;
+      case 'triangle':
+        c.moveTo(cx, cy - r * 0.96);
+        c.lineTo(cx + r * 0.92, cy + r * 0.7);
+        c.lineTo(cx - r * 0.92, cy + r * 0.7);
+        c.closePath(); break;
+      case 'diamond':
+        c.moveTo(cx, cy - r * 0.98);
+        c.lineTo(cx + r * 0.86, cy);
+        c.lineTo(cx, cy + r * 0.98);
+        c.lineTo(cx - r * 0.86, cy);
+        c.closePath(); break;
+      case 'pentagon': polygon(c, cx, cy, r * 0.98, 5, -Math.PI / 2); break;
+      case 'hexagon': polygon(c, cx, cy, r * 0.98, 6, -Math.PI / 2); break;
+      case 'star': starPath(c, cx, cy, r * 1.02, r * 0.46, 5, -Math.PI / 2); break;
+    }
+  }
+
+  function polygon(c, cx, cy, r, sides, startAngle) {
+    for (let i = 0; i < sides; i++) {
+      const a = startAngle + (i * Math.PI * 2) / sides;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.closePath();
+  }
+
+  function starPath(c, cx, cy, rOuter, rInner, points, startAngle) {
+    for (let i = 0; i < points * 2; i++) {
+      const r = i % 2 === 0 ? rOuter : rInner;
+      const a = startAngle + (i * Math.PI) / points;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.closePath();
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  /* ============================================================
+   *  TILE
+   * ============================================================ */
+  function createTile(shape) {
+    return { shape, offsetX: 0, offsetY: 0, scale: 1, alpha: 1, glow: 0, rotation: 0 };
+  }
+
+  function randShapeFrom(list) { return list[Math.floor(Math.random() * list.length)]; }
+
+  function initBoard() {
+    const shapes = currentLevelData.shapes;
+    board = [];
+    for (let r = 0; r < ROWS; r++) {
+      board[r] = [];
+      for (let c = 0; c < COLS; c++) board[r][c] = createTile(randShapeFrom(shapes));
+    }
+    let guard = 0;
+    while (findMatches().length > 0 && guard++ < 100) {
+      findMatches().forEach(({ r, c }) => { board[r][c] = createTile(randShapeFrom(shapes)); });
+    }
+  }
+
+  function findMatches() {
+    const matched = new Set();
+    for (let r = 0; r < ROWS; r++) {
+      let count = 1;
+      for (let c = 1; c <= COLS; c++) {
+        const same = c < COLS && board[r] && board[r][c] && board[r][c - 1] &&
+                     board[r][c].shape === board[r][c - 1].shape;
+        if (same) count++;
+        else {
+          if (count >= 3) for (let k = c - count; k < c; k++) matched.add(r + ',' + k);
+          count = 1;
+        }
+      }
+    }
+    for (let c = 0; c < COLS; c++) {
+      let count = 1;
+      for (let r = 1; r <= ROWS; r++) {
+        const same = r < ROWS && board[r] && board[r - 1] &&
+                     board[r][c] && board[r - 1][c] &&
+                     board[r][c].shape === board[r - 1][c].shape;
+        if (same) count++;
+        else {
+          if (count >= 3) for (let k = r - count; k < r; k++) matched.add(k + ',' + c);
+          count = 1;
+        }
+      }
+    }
+    return Array.from(matched).map(s => {
+      const [r, c] = s.split(',').map(Number);
+      return { r, c };
+    });
+  }
+
+  function swapTiles(r1, c1, r2, c2) {
+    const t = board[r1][c1];
+    board[r1][c1] = board[r2][c2];
+    board[r2][c2] = t;
+  }
+
+  /* ============================================================
+   *  FX
+   * ============================================================ */
+  function spawnParticles(x, y, shape, count = 10) {
+    const info = SHAPE_INFO[shape];
+    if (!info) return;
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+      const speed = 1.5 + Math.random() * 3.5;
+      particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.5,
+        life: 1, size: 3 + Math.random() * 4,
+        color: Math.random() > 0.5 ? info.light : info.color,
+        rotation: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.4
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    const s = dt / 16.67;
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx * s; p.y += p.vy * s;
+      p.vy += 0.35 * s; p.vx *= 0.98;
+      p.rotation += p.vr * s;
+      p.life -= dt / 750;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function spawnFloatingText(x, y, text, subtext = null) {
+    floatingTexts.push({ x, y, text, subtext, life: 1, vy: -1.4, scale: 0.4 });
+  }
+
+  function updateFloatingTexts(dt) {
+    const s = dt / 16.67;
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+      const ft = floatingTexts[i];
+      ft.y += ft.vy * s; ft.vy *= 0.94;
+      ft.scale += (1 - ft.scale) * 0.18 * s;
+      ft.life -= dt / 1100;
+      if (ft.life <= 0) floatingTexts.splice(i, 1);
+    }
+  }
+
+  function shakeScreen(amount) { shakeAmount = Math.max(shakeAmount, amount); }
+  function updateShake(dt) {
+    shakeAmount *= Math.pow(0.88, dt / 16.67);
+    if (shakeAmount < 0.2) shakeAmount = 0;
+  }
+
+  /* ============================================================
+   *  RENDER
+   * ============================================================ */
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (shakeAmount > 0) {
+      ctx.translate((Math.random() - 0.5) * shakeAmount, (Math.random() - 0.5) * shakeAmount);
+    }
+
+    ctx.fillStyle = '#0f1729';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if ((r + c) % 2 === 0) {
+          ctx.fillStyle = 'rgba(255,255,255,0.018)';
+          ctx.fillRect(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+    }
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < ROWS; i++) {
+      ctx.beginPath(); ctx.moveTo(0, i * TILE_SIZE); ctx.lineTo(canvas.width, i * TILE_SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i * TILE_SIZE, 0); ctx.lineTo(i * TILE_SIZE, canvas.height); ctx.stroke();
+    }
+
+    if (board && board.length === ROWS) {
+      const visible = [];
+      for (let r = 0; r < ROWS; r++) {
+        if (!board[r]) continue;
+        for (let c = 0; c < COLS; c++) {
+          const t = board[r][c];
+          if (!t) continue;
+          visible.push({ r, c, tile: t, vy: r * TILE_SIZE + t.offsetY });
+        }
+      }
+      visible.sort((a, b) => a.vy - b.vy);
+      for (const { r, c, tile } of visible) {
+        const isSelected = selectedTile && selectedTile.r === r && selectedTile.c === c;
+        drawTile(c * TILE_SIZE, r * TILE_SIZE, TILE_SIZE, tile, isSelected);
+      }
+    }
+
+    for (const p of particles) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = p.color;
+      const sz = p.size * Math.max(0.2, p.life);
+      ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    for (const ft of floatingTexts) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, ft.life * 1.6));
+      ctx.translate(ft.x, ft.y);
+      ctx.scale(ft.scale, ft.scale);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '800 26px -apple-system, "Segoe UI", sans-serif';
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.strokeText(ft.text, 0, 0);
+      const grad = ctx.createLinearGradient(0, -14, 0, 14);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(1, '#f1c40f');
+      ctx.fillStyle = grad;
+      ctx.fillText(ft.text, 0, 0);
+      if (ft.subtext) {
+        ctx.font = '800 18px -apple-system, "Segoe UI", sans-serif';
+        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.strokeText(ft.subtext, 0, 26);
+        ctx.fillStyle = '#ff6b9d';
+        ctx.fillText(ft.subtext, 0, 26);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function drawTile(px, py, cell, tile, isSelected) {
+    const cx = px + cell / 2 + tile.offsetX;
+    const cy = py + cell / 2 + tile.offsetY;
+    const size = (cell - BOARD_PAD * 2) * tile.scale;
+    if (size <= 0.5) return;
+    const info = SHAPE_INFO[tile.shape];
+    if (!info) return;
+
+    ctx.save();
+    ctx.globalAlpha = tile.alpha;
+
+    if (tile.rotation !== 0) {
+      ctx.translate(cx, cy);
+      ctx.rotate(tile.rotation);
+      ctx.translate(-cx, -cy);
+    }
+
+    if (tile.glow > 0) {
+      ctx.shadowColor = info.light;
+      ctx.shadowBlur = 30 * tile.glow;
+    } else {
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 4;
+    }
+
+    shapePath(ctx, tile.shape, cx, cy, size);
+    const grad = ctx.createRadialGradient(
+      cx - size * 0.22, cy - size * 0.28, size * 0.08,
+      cx, cy, size * 0.78
+    );
+    grad.addColorStop(0, info.light);
+    grad.addColorStop(0.55, info.color);
+    grad.addColorStop(1, info.dark);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+    ctx.save();
+    shapePath(ctx, tile.shape, cx, cy, size);
+    ctx.clip();
+
+    const hlGrad = ctx.createLinearGradient(cx, cy - size * 0.5, cx, cy + size * 0.1);
+    hlGrad.addColorStop(0, 'rgba(255,255,255,0.6)');
+    hlGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hlGrad;
+    ctx.beginPath();
+    ctx.ellipse(cx - size * 0.12, cy - size * 0.22, size * 0.32, size * 0.18, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    const shGrad = ctx.createLinearGradient(cx, cy + size * 0.15, cx, cy + size * 0.5);
+    shGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    shGrad.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = shGrad;
+    ctx.fillRect(cx - size / 2, cy + size * 0.15, size, size * 0.4);
+    ctx.restore();
+
+    shapePath(ctx, tile.shape, cx, cy, size);
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    if (isSelected) {
+      const t = performance.now() / 200;
+      const pulse = 0.5 + 0.5 * Math.sin(t);
+      ctx.shadowColor = '#fff';
+      ctx.shadowBlur = 12 + pulse * 8;
+      shapePath(ctx, tile.shape, cx, cy, size + 6);
+      ctx.strokeStyle = `rgba(255,255,255,${0.6 + pulse * 0.4})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawShapeIcon(c, shape, cx, cy, size) {
+    const info = SHAPE_INFO[shape];
+    if (!info) return;
+    c.clearRect(0, 0, c.canvas.width, c.canvas.height);
+
+    shapePath(c, shape, cx, cy, size);
+    const grad = c.createRadialGradient(
+      cx - size * 0.22, cy - size * 0.28, size * 0.08,
+      cx, cy, size * 0.78
+    );
+    grad.addColorStop(0, info.light);
+    grad.addColorStop(0.55, info.color);
+    grad.addColorStop(1, info.dark);
+    c.fillStyle = grad;
+    c.fill();
+
+    c.save();
+    shapePath(c, shape, cx, cy, size);
+    c.clip();
+    const hl = c.createLinearGradient(cx, cy - size * 0.5, cx, cy + size * 0.1);
+    hl.addColorStop(0, 'rgba(255,255,255,0.65)');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = hl;
+    c.beginPath();
+    c.ellipse(cx - size * 0.12, cy - size * 0.2, size * 0.3, size * 0.16, -0.3, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+
+    shapePath(c, shape, cx, cy, size);
+    c.strokeStyle = 'rgba(255,255,255,0.2)';
+    c.lineWidth = 1.2;
+    c.stroke();
+  }
+
+  /* ============================================================
+   *  GAME LOOP
+   * ============================================================ */
+  let lastTime = performance.now();
+  function gameLoop(now) {
+    const dt = Math.min(64, now - lastTime);
+    lastTime = now;
+    updateAnimations(dt);
+    updateParticles(dt);
+    updateFloatingTexts(dt);
+    updateShake(dt);
+    if (gameState === 'playing' || gameState === 'over') render();
+    requestAnimationFrame(gameLoop);
+  }
+
+  /* ============================================================
+   *  INPUT
+   * ============================================================ */
+  function getTileFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    let clientX, clientY;
+    if (e.touches && e.touches.length) {
+      clientX = e.touches[0].clientX; clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length) {
+      clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY;
+    } else {
+      clientX = e.clientX; clientY = e.clientY;
+    }
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    const c = Math.floor(x / TILE_SIZE);
+    const r = Math.floor(y / TILE_SIZE);
+    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
+    return { r, c };
+  }
+
+  canvas.addEventListener('click', (e) => {
+    if (busy || gameState !== 'playing') return;
+    const tile = getTileFromEvent(e);
+    if (!tile) return;
+    handleTileClick(tile.r, tile.c);
+  });
+
+  let touchStartTile = null;
+  let touchStartPos = null;
+
+  canvas.addEventListener('touchstart', (e) => {
+    if (busy || gameState !== 'playing') return;
+    touchStartTile = getTileFromEvent(e);
+    if (touchStartTile) {
+      touchStartPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      selectedTile = touchStartTile;
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', (e) => {
+    if (busy || !touchStartTile || !touchStartPos) return;
+    const dx = e.touches[0].clientX - touchStartPos.x;
+    const dy = e.touches[0].clientY - touchStartPos.y;
+    if (Math.hypot(dx, dy) < 20) return;
+    let dr = 0, dc = 0;
+    if (Math.abs(dx) > Math.abs(dy)) dc = dx > 0 ? 1 : -1;
+    else dr = dy > 0 ? 1 : -1;
+    const from = touchStartTile;
+    const target = { r: from.r + dr, c: from.c + dc };
+    touchStartTile = null; touchStartPos = null; selectedTile = null;
+    if (target.r >= 0 && target.r < ROWS && target.c >= 0 && target.c < COLS) {
+      trySwap(from.r, from.c, target.r, target.c);
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchend', () => {
+    touchStartTile = null; touchStartPos = null;
+  }, { passive: true });
+
+  function handleTileClick(r, c) {
+    if (!selectedTile) { selectedTile = { r, c }; return; }
+    const dr = Math.abs(selectedTile.r - r);
+    const dc = Math.abs(selectedTile.c - c);
+    if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+      const from = selectedTile;
+      selectedTile = null;
+      trySwap(from.r, from.c, r, c);
+    } else if (selectedTile.r === r && selectedTile.c === c) {
+      selectedTile = null;
+    } else {
+      selectedTile = { r, c };
+    }
+  }
+
+  /* ============================================================
+   *  SWAP + MATCH
+   * ============================================================ */
+  async function trySwap(r1, c1, r2, c2) {
+    if (busy) return false;
+    if (!board[r1] || !board[r2]) return false;
+    if (!board[r1][c1] || !board[r2][c2]) return false;
+    busy = true;
+
+    const t1 = board[r1][c1];
+    const t2 = board[r2][c2];
+    const dx = (c2 - c1) * TILE_SIZE;
+    const dy = (r2 - r1) * TILE_SIZE;
+
+    await Promise.all([
+      tween(t1, { offsetX: dx, offsetY: dy }, 190, easeOutCubic),
+      tween(t2, { offsetX: -dx, offsetY: -dy }, 190, easeOutCubic)
+    ]);
+
+    swapTiles(r1, c1, r2, c2);
+    t1.offsetX = 0; t1.offsetY = 0;
+    t2.offsetX = 0; t2.offsetY = 0;
+
+    const matches = findMatches();
+    if (matches.length === 0) {
+      await Promise.all([
+        tween(t1, { offsetX: -dx, offsetY: -dy }, 190, easeOutCubic),
+        tween(t2, { offsetX: dx, offsetY: dy }, 190, easeOutCubic)
+      ]);
+      swapTiles(r1, c1, r2, c2);
+      t1.offsetX = 0; t1.offsetY = 0;
+      t2.offsetX = 0; t2.offsetY = 0;
+      busy = false;
+      return false;
+    }
+
+    movesLeft--;
+    updateMovesUI();
+    if (movesLeft <= 3) shakeScreen(2);
+
+    await processMatches(matches);
+    await saveProgress();
+
+    if (checkWin()) await onWin();
+    else if (movesLeft <= 0) await onLose();
+    else busy = false;
+    return true;
+  }
+
+  async function processMatches(matches, combo = 1) {
+    const gained = matches.length * 10 * combo;
+    score += gained;
+    updateScoreUI();
+
+    const goalChanged = new Set();
+    matches.forEach(({ r, c }) => {
+      const t = board[r][c];
+      if (t && goalsProgress[t.shape] !== undefined) {
+        goalsProgress[t.shape]++;
+        goalChanged.add(t.shape);
+      }
+    });
+    if (goalChanged.size > 0) updateGoalsUI(goalChanged);
+
+    if (combo > 1) shakeScreen(4 + combo * 3);
+
+    const avgR = matches.reduce((s, m) => s + m.r, 0) / matches.length;
+    const avgC = matches.reduce((s, m) => s + m.c, 0) / matches.length;
+    spawnFloatingText(
+      avgC * TILE_SIZE + TILE_SIZE / 2,
+      avgR * TILE_SIZE + TILE_SIZE / 2,
+      `+${gained}`,
+      combo > 1 ? `COMBO x${combo}` : null
+    );
+
+    await Promise.all(matches.map(({ r, c }) =>
+      tween(board[r][c], { glow: 1, scale: 1.18 }, 130, easeOutCubic)
+    ));
+
+    await Promise.all(matches.map(({ r, c }) => {
+      const tile = board[r][c];
+      spawnParticles(c * TILE_SIZE + TILE_SIZE / 2, r * TILE_SIZE + TILE_SIZE / 2, tile.shape, 10);
+      return tween(tile, { scale: 0, alpha: 0, rotation: Math.PI }, 200, easeInQuad);
+    }));
+
+    matches.forEach(({ r, c }) => { board[r][c] = null; });
+    await animateGravityAndSpawn();
+
+    const next = findMatches();
+    if (next.length > 0) await processMatches(next, combo + 1);
+  }
+
+  async function animateGravityAndSpawn() {
+    const promises = [];
+    for (let c = 0; c < COLS; c++) {
+      let writeRow = ROWS - 1;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (board[r][c] !== null) {
+          if (writeRow !== r) {
+            const tile = board[r][c];
+            board[writeRow][c] = tile;
+            board[r][c] = null;
+            const dist = writeRow - r;
+            tile.offsetY = -dist * TILE_SIZE;
+            promises.push(tween(tile, { offsetY: 0 }, 240 + dist * 30, easeOutBounce));
+          }
+          writeRow--;
+        }
+      }
+      const spawnCount = writeRow + 1;
+      if (spawnCount > 0) {
+        for (let r = 0; r <= writeRow; r++) {
+          const tile = createTile(randShapeFrom(currentLevelData.shapes));
+          board[r][c] = tile;
+          tile.offsetY = -spawnCount * TILE_SIZE;
+          tile.alpha = 0;
+          promises.push(Promise.all([
+            tween(tile, { offsetY: 0 }, 340 + r * 22, easeOutBounce),
+            tween(tile, { alpha: 1 }, 180, easeOutCubic)
+          ]));
+        }
+      }
+    }
+    await Promise.all(promises);
+  }
+
+  /* ============================================================
+   *  HINT
+   * ============================================================ */
+  function findHint() {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (c < COLS - 1) {
+          swapTiles(r, c, r, c + 1);
+          const ok = findMatches().length > 0;
+          swapTiles(r, c, r, c + 1);
+          if (ok) return [{ r, c }, { r, c: c + 1 }];
+        }
+        if (r < ROWS - 1) {
+          swapTiles(r, c, r + 1, c);
+          const ok = findMatches().length > 0;
+          swapTiles(r, c, r + 1, c);
+          if (ok) return [{ r, c }, { r: r + 1, c }];
+        }
+      }
+    }
+    return null;
+  }
+
+  async function highlightHint(hint) {
+    if (!hint) return;
+    busy = true;
+    for (let i = 0; i < 3; i++) {
+      await Promise.all(hint.map(({ r, c }) =>
+        board[r][c] ? tween(board[r][c], { glow: 1.4, scale: 1.22 }, 220, easeOutCubic) : Promise.resolve()
+      ));
+      await Promise.all(hint.map(({ r, c }) =>
+        board[r][c] ? tween(board[r][c], { glow: 0, scale: 1 }, 220, easeOutCubic) : Promise.resolve()
+      ));
+    }
+    busy = false;
+  }
+
+  hintBtn.addEventListener('click', () => {
+    if (busy || gameState !== 'playing') return;
+    hintBtn.disabled = true;
+    VKSDK.showRewardedAd(async (rewarded) => {
+      hintBtn.disabled = false;
+      // В VK награда приходит через data.result; если её нет — всё равно даём подсказку
+      const hint = findHint();
+      if (hint) await highlightHint(hint);
+    });
+  });
+
+  /* ============================================================
+   *  UI
+   * ============================================================ */
+  function updateScoreUI() {
+    scoreValueEl.textContent = score;
+    scoreBox.classList.remove('pulse');
+    void scoreBox.offsetWidth;
+    scoreBox.classList.add('pulse');
+  }
+
+  function updateMovesUI() {
+    movesValueEl.textContent = movesLeft;
+    movesBox.classList.remove('pulse');
+    void movesBox.offsetWidth;
+    movesBox.classList.add('pulse');
+    movesValueEl.style.color = movesLeft <= 5 ? '#ff6b6b' : '#f1c40f';
+  }
+
+  function updateLevelUI() { levelValueEl.textContent = currentLevel; }
+
+  function buildGoalsPanel() {
+    goalsPanel.innerHTML = '';
+    currentLevelData.goals.forEach((g, idx) => {
+      const el = document.createElement('div');
+      el.className = 'goal';
+      el.dataset.shape = g.shape;
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(-10px) scale(0.8)';
+      el.style.transition = 'opacity 0.35s ease, transform 0.45s cubic-bezier(0.34,1.56,0.64,1)';
+      setTimeout(() => {
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0) scale(1)';
+      }, 300 + idx * 100);
+
+      const c = document.createElement('canvas');
+      c.width = 34; c.height = 34;
+      c.className = 'goalIcon';
+      drawShapeIcon(c.getContext('2d'), g.shape, 17, 17, 28);
+
+      const count = document.createElement('span');
+      count.className = 'goalCount';
+      count.textContent = `0/${g.count}`;
+
+      el.appendChild(c);
+      el.appendChild(count);
+      goalsPanel.appendChild(el);
+    });
+  }
+
+  function updateGoalsUI(changedShapes = null) {
+    currentLevelData.goals.forEach(g => {
+      const el = goalsPanel.querySelector(`.goal[data-shape="${g.shape}"]`);
+      if (!el) return;
+      const count = goalsProgress[g.shape] || 0;
+      const countEl = el.querySelector('.goalCount');
+      countEl.textContent = `${Math.min(count, g.count)}/${g.count}`;
+      if (count >= g.count) el.classList.add('done');
+      else el.classList.remove('done');
+      if (changedShapes && changedShapes.has(g.shape) && count < g.count) {
+        el.classList.remove('pulse');
+        void el.offsetWidth;
+        el.classList.add('pulse');
+      }
+    });
+  }
+
+  function checkWin() {
+    return currentLevelData.goals.every(g => goalsProgress[g.shape] >= g.count);
+  }
+
+  /* ============================================================
+   *  OVERLAYS
+   * ============================================================ */
+  function showOverlay(title, text, btnText) {
+    return new Promise(resolve => {
+      overlayTitle.textContent = title;
+      overlayText.textContent = text;
+      overlayBtn.textContent = btnText;
+      overlay.classList.add('active');
+      let resolved = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        overlay.classList.remove('active');
+        resolve();
+      };
+      overlayBtn.onclick = finish;
+    });
+  }
+
+  /* ============================================================
+   *  SAVE / LOAD
+   * ============================================================ */
+  async function saveProgress() {
+    if (score > progress.bestScore) progress.bestScore = score;
+    const data = {
+      unlockedLevel: progress.unlockedLevel,
+      currentLevel: progress.currentLevel,
+      levelStars: progress.levelStars,
+      levelScores: progress.levelScores,
+      bestScore: progress.bestScore,
+      totalScore: progress.totalScore
+    };
+    await VKSDK.saveData(data);
+  }
+
+  async function loadProgress() {
+    const data = await VKSDK.loadData();
+    if (!data) return;
+    progress.unlockedLevel = Math.max(1, Math.min(LEVELS.length, data.unlockedLevel || 1));
+    progress.currentLevel = data.currentLevel || 1;
+    progress.levelStars = data.levelStars || {};
+    progress.levelScores = data.levelScores || {};
+    progress.bestScore = data.bestScore || 0;
+    progress.totalScore = data.totalScore || 0;
+  }
+
+  /* ============================================================
+   *  LEVEL FLOW
+   * ============================================================ */
+  async function startLevel(n) {
+    if (n < 1 || n > LEVELS.length) n = 1;
+    if (n > progress.unlockedLevel) {
+      showToast(t('locked'));
+      return;
+    }
+
+    winOverlay.classList.remove('active', 'winOverlayActive');
+    overlay.classList.remove('active');
+    showScreen('game');
+
+    await sleep(450);
+
+    gameState = 'intro';
+    busy = true;
+
+    currentLevel = n;
+    currentLevelData = LEVELS[n - 1];
+    movesLeft = currentLevelData.moves;
+    score = 0;
+    goalsProgress = {};
+    currentLevelData.goals.forEach(g => { goalsProgress[g.shape] = 0; });
+    selectedTile = null;
+    particles.length = 0;
+    floatingTexts.length = 0;
+    animations.length = 0;
+
+    progress.currentLevel = n;
+    initBoard();
+
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const tile = board[r][c];
+        tile.offsetY = -(ROWS - r + 1) * TILE_SIZE - 40;
+        tile.alpha = 0;
+        tile.scale = 0.3;
+        tile.rotation = (Math.random() - 0.5) * Math.PI * 0.8;
+      }
+    }
+
+    updateLevelUI();
+    updateScoreUI();
+    updateMovesUI();
+    buildGoalsPanel();
+    updateGoalsUI();
+
+    flashLevel();
+    shakeScreen(6);
+
+    const centerR = (ROWS - 1) / 2;
+    const centerC = (COLS - 1) / 2;
+    const maxDist = Math.hypot(centerR, centerC);
+
+    const promises = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const tile = board[r][c];
+        const dist = Math.hypot(r - centerR, c - centerC);
+        const delay = (dist / maxDist) * 340 + Math.random() * 40;
+
+        promises.push(Promise.all([
+          tween(tile, { offsetY: 0 }, 620, easeOutBounce, delay),
+          tween(tile, { alpha: 1 }, 260, easeOutCubic, delay),
+          tween(tile, { rotation: 0 }, 700, easeOutBack, delay),
+          tween(tile, { scale: 1 }, 520, easeOutElastic, delay)
+        ]));
+      }
+    }
+    await Promise.all(promises);
+
+    flashLevel();
+
+    busy = false;
+    gameState = 'playing';
+    VKSDK.gameplayStart();
+  }
+
+  function calculateStars(usedMoves, totalMoves) {
+    const ratio = usedMoves / totalMoves;
+    if (ratio <= 0.55) return 3;
+    if (ratio <= 0.8) return 2;
+    return 1;
+  }
+
+  async function onWin() {
+    gameState = 'over';
+    VKSDK.gameplayStop();
+    await sleep(450);
+
+    const usedMoves = currentLevelData.moves - movesLeft;
+    const stars = calculateStars(usedMoves, currentLevelData.moves);
+
+    const prevStars = progress.levelStars[currentLevel] || 0;
+    if (stars > prevStars) progress.levelStars[currentLevel] = stars;
+
+    const prevScore = progress.levelScores[currentLevel] || 0;
+    if (score > prevScore) progress.levelScores[currentLevel] = score;
+
+    let unlockedNew = false;
+    if (currentLevel === progress.unlockedLevel && currentLevel < LEVELS.length) {
+      progress.unlockedLevel = currentLevel + 1;
+      unlockedNew = true;
+    }
+
+    await saveProgress();
+
+    const isLast = currentLevel >= LEVELS.length;
+    winTitle.textContent = isLast ? t('allComplete') : t('levelComplete');
+    winScore.textContent = score;
+    winMoves.textContent = `${usedMoves}/${currentLevelData.moves}`;
+    winMenuBtn.textContent = t('toMenu');
+    winNextBtn.textContent = t('nextLevel');
+
+    [...winStars.querySelectorAll('.star')].forEach((el, i) => {
+      el.classList.remove('filled');
+      if (i < stars) el.classList.add('filled');
+    });
+
+    winNextBtn.style.display = isLast ? 'none' : '';
+
+    winOverlay.classList.add('active');
+    winOverlay.classList.add('winOverlayActive');
+
+    if (unlockedNew) {
+      setTimeout(() => showToast(t('unlocked', { n: currentLevel + 1 }), 2500), 1400);
+    }
+  }
+
+  async function onLose() {
+    gameState = 'over';
+    VKSDK.gameplayStop();
+    await sleep(450);
+
+    const goalLines = currentLevelData.goals.map(g => {
+      const cur = Math.min(goalsProgress[g.shape], g.count);
+      const name = shapeName(g.shape, g.count);
+      return `• ${cur}/${g.count} ${name}`;
+    }).join('\n');
+
+    await new Promise(resolve => {
+      overlayTitle.textContent = t('outOfMoves');
+      overlayText.textContent = `${t('outOfMovesText')}\n\n${t('progress')}:\n${goalLines}\n\n${t('score')}: ${score}`;
+      overlayBtn.textContent = t('retry');
+      overlay.classList.add('active');
+      let resolved = false;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        overlay.classList.remove('active');
+        resolve();
+      };
+      overlayBtn.onclick = finish;
+    });
+
+    await new Promise(resolve => { VKSDK.showFullscreenAd(() => resolve()); });
+    await startLevel(currentLevel);
+  }
+
+  function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+  /* ============================================================
+   *  LEADERBOARD (VK)
+   * ============================================================ */
+  async function showRecords() {
+    // В VK рекорды открываются нативным окном (VKWebAppShowLeaderBoardBox)
+    const ok = await VKSDK.showLeaderboard(progress.bestScore);
+    if (!ok) {
+      await showOverlay(
+        t('leaderboard'),
+        `${t('leaderboardUnavailable')}\n\n${t('yourBest')}: ${progress.bestScore}`,
+        t('ok')
+      );
+    }
+  }
+
+  /* ============================================================
+   *  BUTTONS
+   * ============================================================ */
+  playBtn.addEventListener('click', () => {
+    let target = progress.unlockedLevel;
+    if (target > LEVELS.length) target = 1;
+    startLevel(target);
+  });
+  levelsBtn.addEventListener('click', () => showScreen('levels'));
+  recordsBtn.addEventListener('click', () => showRecords());
+  levelsBackBtn.addEventListener('click', () => showScreen('menu'));
+
+  gameMenuBtn.addEventListener('click', async () => {
+    if (busy) return;
+    gameState = 'over';
+    VKSDK.gameplayStop();
+
+    const action = await new Promise(resolve => {
+      overlayTitle.textContent = t('pause');
+      overlayText.textContent = `${t('level')} ${currentLevel}\n${t('score')}: ${score}\n${t('moves')}: ${movesLeft}`;
+      overlayBtn.textContent = t('toMenu');
+      overlay.classList.add('active');
+      overlayBtn.onclick = () => {
+        overlay.classList.remove('active');
+        overlay.onclick = null;
+        resolve('menu');
+      };
+      overlay.onclick = (e) => {
+        if (e.target === overlay) {
+          overlay.classList.remove('active');
+          overlay.onclick = null;
+          resolve('continue');
+        }
+      };
+    });
+
+    if (action === 'menu') {
+      saveProgress();
+      showScreen('menu');
+    } else {
+      gameState = 'playing';
+      VKSDK.gameplayStart();
+    }
+  });
+
+  winMenuBtn.addEventListener('click', async () => {
+    winOverlay.classList.remove('active', 'winOverlayActive');
+    await new Promise(resolve => { VKSDK.showFullscreenAd(() => resolve()); });
+    showScreen('menu');
+  });
+
+  winNextBtn.addEventListener('click', async () => {
+    winOverlay.classList.remove('active', 'winOverlayActive');
+    const next = currentLevel + 1;
+    if (next > LEVELS.length) { showScreen('menu'); return; }
+    await new Promise(resolve => { VKSDK.showFullscreenAd(() => resolve()); });
+    await startLevel(next);
+  });
+
+  /* ============================================================
+   *  START
+   * ============================================================ */
+  async function start() {
+    requestAnimationFrame(gameLoop);
+
+    // 1. Сначала инициализируем VK Bridge, чтобы получить launch params
+    await VKSDK.init();
+
+    // 2. Определяем язык (учитывая vk_language)
+    const lang = await detectLanguage();
+    currentLang = lang;
+
+    // 3. Загружаем прогресс из VK Storage
+    await loadProgress();
+
+    applyTranslations();
+
+    await sleep(1200);
+    document.getElementById('loading').classList.add('hidden');
+    setTimeout(() => {
+      showScreen('menu');
+    }, 350);
+
+    setInterval(() => { if (gameState === 'playing') saveProgress(); }, 30000);
+    window.addEventListener('beforeunload', () => { saveProgress(); });
+  }
+
+  start();
+
+  </script>
+</body>
+</html>
